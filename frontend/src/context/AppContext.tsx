@@ -572,7 +572,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     try {
-      await api.employees.update(id, updatedData);
+      const res = await api.employees.update(id, updatedData);
+      if (res && res.id) {
+        setEmployees((prev) => {
+          const updated = prev.map((emp) => (emp.id === id ? { ...emp, ...res, id: res.id } : emp));
+          localStorage.setItem('importrivero_employees_v5', JSON.stringify(updated));
+          return updated;
+        });
+        setBackendStatus('connected');
+      }
     } catch (err) {
       console.warn('Actualización de empleado guardada localmente:', err);
     }

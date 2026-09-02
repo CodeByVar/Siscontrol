@@ -132,13 +132,44 @@ export const updateEmployee = async (req: Request, res: Response) => {
       data.baseSalary = Number(data.baseSalary);
     }
 
-    const employee = await prisma.employee.update({
-      where: { id },
-      data,
+    // 1. Buscar si ya existe por ID o por DNI
+    let existing = await prisma.employee.findUnique({ where: { id } });
+    if (!existing && data.dni) {
+      existing = await prisma.employee.findUnique({ where: { dni: String(data.dni) } });
+    }
+
+    if (existing) {
+      const employee = await prisma.employee.update({
+        where: { id: existing.id },
+        data,
+      });
+      return res.json(employee);
+    }
+
+    // 2. Si es un trabajador que existía previamente solo en local, crearlo directamente en PostgreSQL
+    const newEmployee = await prisma.employee.create({
+      data: {
+        dni: data.dni || '000000',
+        firstName: data.firstName || 'Trabajador',
+        lastName: data.lastName || 'Rivero',
+        email: data.email || null,
+        phone: data.phone || null,
+        department: data.department || 'OFICINA',
+        position: data.position || 'OFICINA',
+        status: data.status || 'ACTIVE',
+        paymentFrequency: data.paymentFrequency || 'MENSUAL',
+        workSchedule: data.workSchedule || 'LUNES_A_VIERNES',
+        baseSalary: Number(data.baseSalary || 2400),
+        bankName: data.bankName || null,
+        bankAccountNumber: data.bankAccountNumber || null,
+        qrImageUrl: data.qrImageUrl || null,
+        notes: data.notes || null,
+      },
     });
 
-    return res.json(employee);
+    return res.json(newEmployee);
   } catch (error) {
+    console.error('Error al actualizar empleado:', error);
     return res.status(500).json({ error: 'Error al actualizar empleado' });
   }
 };

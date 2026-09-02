@@ -259,7 +259,6 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
                   inputMode="numeric"
                   value={dniInput}
                   onChange={(e) => setDniInput(e.target.value)}
-                  placeholder="Ej: 9517526"
                   autoFocus
                   className="w-full px-4 py-3 rounded-2xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-base font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 focus:outline-none"
                 />

@@ -144,7 +144,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenAttendance }) => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 font-medium"
-                    placeholder="betito01.hra@gmail.com"
                   />
                 </div>
               </div>
@@ -162,7 +161,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onOpenAttendance }) => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 font-mono text-sm tracking-wider"
-                    placeholder="••••••••"
                   />
                   <button
                     type="button"

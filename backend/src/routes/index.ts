@@ -28,14 +28,24 @@ import {
   getAttendances,
   getTodaySummary,
 } from '../controllers/attendance.controller';
+import {
+  checkWorkerPinStatus,
+  setWorkerPin,
+  getWorkerPortalData,
+} from '../controllers/worker.controller';
 import { authenticateJWT, requireRoles } from '../middlewares/auth';
 
 const router = Router();
 
-// Rutas Públicas (Sin Token)
+// Rutas Públicas (Sin Token - Para Marcador GPS y Portal del Trabajador)
 router.post('/auth/login', login);
 router.get('/attendance/worker/:dni', verifyWorkerByDni);
 router.post('/attendance/check', recordAttendance);
+
+// Portal Seguro del Trabajador (Protegido por C.I. + PIN Personal)
+router.get('/worker/pin-status/:dni', checkWorkerPinStatus);
+router.post('/worker/set-pin', setWorkerPin);
+router.post('/worker/portal-data', getWorkerPortalData);
 
 // Rutas Protegidas (Requieren Token)
 router.use(authenticateJWT);

@@ -250,4 +250,31 @@ export const api = {
       }>('/attendance/today-summary');
     },
   },
+
+  // Portal de Consulta para Trabajadores (C.I. + PIN de Seguridad)
+  worker: {
+    checkPinStatus: async (dni: string) => {
+      return request<{
+        employee: any;
+        hasPin: boolean;
+      }>(`/worker/pin-status/${encodeURIComponent(dni)}`);
+    },
+    setPin: async (dni: string, pin: string) => {
+      return request<{ message: string }>('/worker/set-pin', {
+        method: 'POST',
+        body: JSON.stringify({ dni, pin }),
+      });
+    },
+    getPortalData: async (dni: string, pin: string) => {
+      return request<{
+        employee: any;
+        payrollRecords: any[];
+        advances: any[];
+        attendances: any[];
+      }>('/worker/portal-data', {
+        method: 'POST',
+        body: JSON.stringify({ dni, pin }),
+      });
+    },
+  },
 };

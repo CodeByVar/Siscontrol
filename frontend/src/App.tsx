@@ -75,14 +75,20 @@ export const App: React.FC = () => {
   }, []);
 
   if (!isAuthenticated) {
+    const isPublicAttendance =
+      window.location.search.includes('asistencia') || window.location.hash.includes('asistencia');
+
     return (
-      <>
-        <LoginView onOpenAttendance={() => setIsWorkerAttendanceOpen(true)} />
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        {!isPublicAttendance && (
+          <LoginView onOpenAttendance={() => setIsWorkerAttendanceOpen(true)} />
+        )}
         <WorkerAttendanceModal
-          isOpen={isWorkerAttendanceOpen}
+          isOpen={isWorkerAttendanceOpen || isPublicAttendance}
           onClose={() => setIsWorkerAttendanceOpen(false)}
+          isPublicMode={isPublicAttendance}
         />
-      </>
+      </div>
     );
   }
 

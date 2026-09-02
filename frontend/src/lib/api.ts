@@ -115,6 +115,12 @@ export const api = {
         employee?: any;
       }>('/auth/profile');
     },
+    changePassword: async (currentPassword: string, newPassword: string) => {
+      return request<{ message: string }>('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+    },
   },
 
   // Empleados

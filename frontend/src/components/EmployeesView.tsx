@@ -24,7 +24,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   openAddEmployeeModal,
   onEditEmployee,
 }) => {
-  const { employees, deleteEmployee, currentRole, currencySymbol } = useApp();
+  const { employees, deleteEmployee, currentRole, currencySymbol, formatMoney } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [frequencyFilter, setFrequencyFilter] = useState<string>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
@@ -203,7 +203,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                       Salario Base {isWeekly ? '(Semanal)' : '(Mensual)'}
                     </span>
                     <span className="text-base font-black text-brand-600 dark:text-brand-400 font-mono">
-                      {currencySymbol} {Number(emp.baseSalary).toLocaleString()}
+                      {formatMoney(emp.baseSalary)}
                     </span>
                   </div>
 
@@ -212,7 +212,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                       Por Día Trabajado
                     </span>
                     <span className="text-sm font-black text-slate-800 dark:text-slate-200 font-mono block">
-                      {currencySymbol} {dailyRate.toFixed(2)}
+                      {formatMoney(dailyRate)}
                     </span>
                     <span className="text-[9px] text-slate-400 block font-medium">
                       ({workingDaysInPeriod} días {isWeekly ? '/sem' : '/mes'})

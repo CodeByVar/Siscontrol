@@ -1,5 +1,4 @@
-import { Router } from 'express';
-import { login, getProfile } from '../controllers/auth.controller';
+import { login, getProfile, changePassword } from '../controllers/auth.controller';
 import {
   getEmployees,
   getEmployeeById,
@@ -32,8 +31,9 @@ router.post('/auth/login', login);
 // Rutas Protegidas (Requieren Token)
 router.use(authenticateJWT);
 
-// Perfil de usuario autenticado
+// Perfil y Seguridad
 router.get('/auth/profile', getProfile);
+router.post('/auth/change-password', changePassword);
 
 // Dashboard (Acceso: SUPERADMIN, ADMINISTRADOR, OFICINA)
 router.get(

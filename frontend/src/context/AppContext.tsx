@@ -31,6 +31,14 @@ interface AppContextType {
   logout: () => void;
   currencySymbol: string;
 
+  // Privacy & Inactivity
+  isPrivacyMode: boolean;
+  togglePrivacyMode: () => void;
+  formatMoney: (val: number | string) => string;
+  inactivityCountdown: number | null;
+  resetInactivityTimer: () => void;
+  changeUserPassword: (currentPass: string, newPass: string) => Promise<{ success: boolean; message: string }>;
+
   // Backend Sync Status
   backendStatus: 'connected' | 'connecting' | 'offline';
   backendUrl: string;
@@ -235,6 +243,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const currencySymbol = 'Bs';
+
+  // Modo Privacidad (Ocultar montos y salarios)
+  const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(() => {
+    return localStorage.getItem('importrivero_privacy_mode') === 'true';
+  });
+
+  const togglePrivacyMode = () => {
+    setIsPrivacyMode((prev) => {
+      const next = !prev;
+      localStorage.setItem('importrivero_privacy_mode', String(next));
+      return next;
+    });
+  };
+
+  const formatMoney = (val: number | string): string => {
+    if (isPrivacyMode) {
+      return `${currencySymbol} ••••••`;
+    }
+    const num = Number(val) || 0;
+    return `${currencySymbol} ${num.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // Temporizador de Inactividad (10 minutos con advertencia en el minuto 9)
+  const [inactivityCountdown, setInactivityCountdown] = useState<number | null>(null);
+  const lastActiveRef = React.useRef<number>(Date.now());
+
+  const resetInactivityTimer = () => {
+    lastActiveRef.current = Date.now();
+    setInactivityCountdown(null);
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleActivity = () => {
+      lastActiveRef.current = Date.now();
+      if (inactivityCountdown !== null) {
+        setInactivityCountdown(null);
+      }
+    };
+
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('mousedown', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('touchstart', handleActivity);
+    window.addEventListener('scroll', handleActivity);
+
+    const checkInterval = setInterval(() => {
+      const elapsedSeconds = Math.floor((Date.now() - lastActiveRef.current) / 1000);
+      const totalTimeout = 10 * 60; // 10 minutos (600s)
+      const warningThreshold = 9 * 60; // Mostrar advertencia a los 9 minutos (540s)
+
+      if (elapsedSeconds >= totalTimeout) {
+        logout();
+        setInactivityCountdown(null);
+      } else if (elapsedSeconds >= warningThreshold) {
+        const remaining = totalTimeout - elapsedSeconds;
+        setInactivityCountdown(remaining);
+      } else {
+        if (inactivityCountdown !== null) {
+          setInactivityCountdown(null);
+        }
+      }
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('mousedown', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+      window.removeEventListener('scroll', handleActivity);
+      clearInterval(checkInterval);
+    };
+  }, [isAuthenticated]);
+
+  // Cambio de contraseña seguro con Backend / PostgreSQL
+  const changeUserPassword = async (
+    currentPass: string,
+    newPass: string
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await api.auth.changePassword(currentPass, newPass);
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+      return { success: true, message: res?.message || 'Contraseña cambiada exitosamente' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Error al cambiar la contraseña' };
+    }
+  };
 
   // Base de datos de Trabajadores (con guardado inmediato)
   const [employees, setEmployees] = useState<Employee[]>(() => {
@@ -985,6 +1081,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         login,
         logout,
         currencySymbol,
+        isPrivacyMode,
+        togglePrivacyMode,
+        formatMoney,
+        inactivityCountdown,
+        resetInactivityTimer,
+        changeUserPassword,
         backendStatus,
         backendUrl,
         setBackendUrl,

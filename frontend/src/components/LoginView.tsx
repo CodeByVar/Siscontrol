@@ -13,8 +13,8 @@ import { useApp } from '../context/AppContext';
 
 export const LoginView: React.FC = () => {
   const { login } = useApp();
-  const [email, setEmail] = useState('betito01.hra@gmail.com');
-  const [password, setPassword] = useState('20202020');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -187,26 +187,12 @@ export const LoginView: React.FC = () => {
             </form>
           </div>
 
-          {/* Acceso Rápido Administrador */}
-          <div className="pt-4 border-t border-slate-800 space-y-2">
-            <button
-              type="button"
-              onClick={handleQuickLoginAdmin}
-              className="w-full p-3 rounded-2xl bg-purple-500/10 border border-purple-500/30 hover:border-purple-500 text-left transition-all flex items-center justify-between shadow-sm cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
-                <div>
-                  <span className="font-extrabold text-xs text-white block">
-                    Acceso Rápido Administrador (Beto)
-                  </span>
-                  <span className="text-[10px] text-purple-300">
-                    betito01.hra@gmail.com &bull; SUPERADMIN
-                  </span>
-                </div>
-              </div>
-              <span className="text-[11px] font-bold text-purple-400">&rarr;</span>
-            </button>
+          {/* Seguridad y Privacidad */}
+          <div className="pt-4 border-t border-slate-800/80 text-center">
+            <p className="text-[11px] text-slate-500 flex items-center justify-center gap-1.5 font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              Acceso restringido y cifrado a personal autorizado de Importadora Rivero
+            </p>
           </div>
         </div>
       </div>

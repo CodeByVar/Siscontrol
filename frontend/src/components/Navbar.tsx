@@ -10,10 +10,14 @@ import {
   RefreshCw,
   Server,
   X,
-  CheckCircle2,
+  Eye,
+  EyeOff,
+  KeyRound,
+  ShieldAlert,
 } from 'lucide-react';
 import { useApp, SYSTEM_USERS } from '../context/AppContext';
 import { Logo } from './Logo';
+import { ChangePasswordModal } from './ChangePasswordModal';
 
 interface NavbarProps {
   onOpenSearch?: () => void;
@@ -36,9 +40,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     backendUrl,
     setBackendUrl,
     syncWithBackend,
+    isPrivacyMode,
+    togglePrivacyMode,
+    inactivityCountdown,
+    resetInactivityTimer,
   } = useApp();
 
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [inputUrl, setInputUrl] = useState(backendUrl);
   const [isTesting, setIsTesting] = useState(false);
 
@@ -126,6 +135,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </button>
 
+        {/* Botón de Modo Privacidad (Ocultar/Revelar Montos) */}
+        <button
+          onClick={togglePrivacyMode}
+          title={isPrivacyMode ? 'Modo Privacidad Activo: Sueldos Ocultos (Clic para revelar)' : 'Ocultar Sueldos y Montos (Modo Privacidad)'}
+          className={`w-10 h-10 rounded-full border transition-all flex items-center justify-center shadow-sm cursor-pointer hover:scale-105 active:scale-95 ${
+            isPrivacyMode
+              ? 'bg-amber-500/15 border-amber-500/30 text-amber-500 dark:text-amber-400 ring-2 ring-amber-500/20'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-brand-500'
+          }`}
+        >
+          {isPrivacyMode ? <EyeOff className="w-4 h-4 text-amber-500" /> : <Eye className="w-4 h-4" />}
+        </button>
+
         {/* Theme Toggle Button */}
         <button
           onClick={toggleTheme}
@@ -160,11 +182,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
+        {/* Botón de Cambiar Contraseña */}
+        <button
+          onClick={() => setIsPasswordModalOpen(true)}
+          title="Cambiar mi Contraseña de Acceso"
+          className="p-2.5 rounded-2xl text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors ml-0.5 border border-transparent hover:border-amber-500/20"
+        >
+          <KeyRound className="w-4 h-4" />
+        </button>
+
         {/* Botón de Cerrar Sesión */}
         <button
           onClick={logout}
           title="Cerrar Sesión"
-          className="p-2.5 rounded-2xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors ml-1 border border-transparent hover:border-red-500/20"
+          className="p-2.5 rounded-2xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors ml-0.5 border border-transparent hover:border-red-500/20"
         >
           <LogOut className="w-4 h-4" />
         </button>
@@ -267,6 +298,39 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
       )}
+      {/* Modal de Advertencia de Inactividad (Aparece al minuto 9 de inactividad) */}
+      {inactivityCountdown !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 w-full max-w-sm rounded-3xl border border-amber-500/30 shadow-2xl p-6 text-center space-y-4 animate-in zoom-in-95">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center justify-center mx-auto animate-pulse">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                ¿Sigues ahí?
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Por seguridad de nóminas, tu sesión se cerrará automáticamente en:
+              </p>
+              <div className="mt-2.5 text-4xl font-black text-amber-500 font-mono tracking-tight">
+                {inactivityCountdown}s
+              </div>
+            </div>
+            <button
+              onClick={resetInactivityTimer}
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-brand-600 to-sky-500 hover:from-brand-500 hover:to-sky-400 text-white font-black text-xs shadow-lg shadow-sky-500/25 transition-all cursor-pointer hover:scale-[1.02] active:scale-98"
+            >
+              Mantener mi sesión activa
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Cambio de Contraseña */}
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+      />
     </header>
   );
 };

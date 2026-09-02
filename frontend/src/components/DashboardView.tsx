@@ -27,7 +27,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   openAddEmployeeModal,
   openAddAdvanceModal,
 }) => {
-  const { employees, advances, periods, payrollRecords, currentRole, currencySymbol } = useApp();
+  const { employees, advances, periods, payrollRecords, currentRole, currencySymbol, formatMoney } = useApp();
 
   const isBossOrAdmin = currentRole === 'SUPERADMIN' || currentRole === 'ADMINISTRADOR';
 
@@ -124,7 +124,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-2xl lg:text-3xl font-black text-slate-900 dark:text-white font-mono">
-            {currencySymbol} {weeklyBaseSum.toLocaleString()}
+            {formatMoney(weeklyBaseSum)}
           </div>
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
             <span>{weeklyEmployees.length} Choferes & Almacén</span>
@@ -146,7 +146,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-2xl lg:text-3xl font-black text-slate-900 dark:text-white font-mono">
-            {currencySymbol} {monthlyBaseSum.toLocaleString()}
+            {formatMoney(monthlyBaseSum)}
           </div>
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
             <span>{monthlyEmployees.length} Oficina & Ventas</span>
@@ -168,7 +168,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-2xl lg:text-3xl font-black text-amber-600 dark:text-amber-400 font-mono">
-            {currencySymbol} {totalPendingAdvances.toLocaleString()}
+            {formatMoney(totalPendingAdvances)}
           </div>
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
             <span>{pendingAdvances.length} vales solicitados</span>

@@ -14,6 +14,7 @@ import {
   EyeOff,
   KeyRound,
   ShieldAlert,
+  CheckCircle2,
 } from 'lucide-react';
 import { useApp, SYSTEM_USERS } from '../context/AppContext';
 import { Logo } from './Logo';

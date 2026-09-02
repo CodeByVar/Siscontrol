@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { prisma } from '../lib/prisma';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // 1. Comprobar si el trabajador ya tiene un PIN creado
 export const checkWorkerPinStatus = async (req: Request, res: Response) => {

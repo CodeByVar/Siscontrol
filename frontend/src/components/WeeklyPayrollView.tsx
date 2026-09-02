@@ -56,7 +56,12 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   }, [weeklyPeriods, selectedPeriodId]);
 
   const activePeriod = weeklyPeriods.find((p) => p.id === selectedPeriodId) || weeklyPeriods[0];
-  const activeRecords = payrollRecords.filter((r) => r.periodId === (activePeriod?.id || ''));
+  const rawRecords = payrollRecords.filter((r) => r.periodId === (activePeriod?.id || ''));
+  // Deduplicación estricta por Carnet de Identidad (DNI) para evitar filas dobles
+  const activeRecords = rawRecords.filter((rec, index, self) => {
+    const key = rec.employee?.dni || rec.employeeId;
+    return index === self.findIndex((r) => (r.employee?.dni || r.employeeId) === key);
+  });
 
   const isBossOrAdmin = currentRole === 'SUPERADMIN' || currentRole === 'ADMINISTRADOR';
 

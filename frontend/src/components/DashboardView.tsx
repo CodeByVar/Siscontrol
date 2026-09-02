@@ -12,7 +12,7 @@ import {
   Wallet,
   Sparkles,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp, deduplicateEmployees } from '../context/AppContext';
 import { SalaryCharts } from './SalaryCharts';
 import { NavTab } from './Sidebar';
 
@@ -31,8 +31,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const isBossOrAdmin = currentRole === 'SUPERADMIN' || currentRole === 'ADMINISTRADOR';
 
-  // Cálculos 100% REALES basados en tus trabajadores registrados
-  const activeEmployees = employees.filter((e) => e.status === 'ACTIVE');
+  // Cálculos 100% REALES basados en tus trabajadores registrados (Sin duplicados por C.I.)
+  const activeEmployees = deduplicateEmployees(employees.filter((e) => e.status === 'ACTIVE'));
   const weeklyEmployees = activeEmployees.filter((e) => e.paymentFrequency === 'SEMANAL');
   const monthlyEmployees = activeEmployees.filter((e) => e.paymentFrequency === 'MENSUAL');
 

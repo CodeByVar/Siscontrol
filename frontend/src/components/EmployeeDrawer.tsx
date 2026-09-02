@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Calendar,
   MessageSquare,
-  MapPin,
 } from 'lucide-react';
 import { PayrollRecord, PayrollPeriod } from '../types';
 import { useApp } from '../context/AppContext';
@@ -26,7 +25,7 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
   record,
   period,
 }) => {
-  const { updateRecord, currentRole, currencySymbol, attendances } = useApp();
+  const { updateRecord, currentRole, currencySymbol } = useApp();
 
   const isBossOrAdmin = currentRole === 'SUPERADMIN' || currentRole === 'ADMINISTRADOR';
 
@@ -40,26 +39,6 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
 
   // Días laborables reales según jornada
   const standardDays = isWeekly ? (isLunASab ? 6 : 5) : (isLunASab ? 24 : 20);
-
-  // Días de asistencia marcados por GPS dentro de este periodo de liquidación
-  const attendanceDaysCount = React.useMemo(() => {
-    if (!attendances || !period || !record) return 0;
-    const periodStart = new Date(period.startDate);
-    periodStart.setHours(0, 0, 0, 0);
-    const periodEnd = new Date(period.endDate);
-    periodEnd.setHours(23, 59, 59, 999);
-
-    const empAtts = attendances.filter((att) => {
-      if (att.employeeId !== record.employeeId) return false;
-      const attDate = new Date(att.timestamp);
-      return attDate >= periodStart && attDate <= periodEnd;
-    });
-
-    const uniqueDates = new Set(
-      empAtts.map((att) => new Date(att.timestamp).toISOString().split('T')[0])
-    );
-    return uniqueDates.size;
-  }, [attendances, record, period]);
 
   useEffect(() => {
     if (record) {
@@ -110,17 +89,16 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
                   {record.employee.lastName}, {record.employee.firstName}
                 </h2>
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    isWeekly
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isWeekly
                       ? 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border-sky-500/30'
                       : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30'
-                  }`}
+                    }`}
                 >
                   {record.employee.paymentFrequency}
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
-                <span>{record.employee.position}</span> &bull; 
+                <span>{record.employee.position}</span> &bull;
                 <span className="text-cyan-600 dark:text-cyan-400 font-bold flex items-center gap-0.5">
                   <Calendar className="w-3 h-3" />
                   {isLunASab ? 'Lun a Sáb (6d)' : 'Lun a Vie (5d)'}
@@ -152,11 +130,10 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
                 Estado del Recibo
               </span>
               <span
-                className={`text-[10px] font-bold px-2.5 py-1 rounded-full border inline-block mt-0.5 ${
-                  record.status === 'PAID'
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-full border inline-block mt-0.5 ${record.status === 'PAID'
                     ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                     : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                }`}
+                  }`}
               >
                 {record.status === 'PAID' ? 'PAGADO' : 'BORRADOR'}
               </span>
@@ -176,40 +153,15 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
             </div>
 
             {/* Días Trabajados Slider */}
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/90 space-y-3">
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/90 space-y-2">
               <div className="flex items-center justify-between">
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block">
-                    Días Trabajados ({workedDays} / {standardDays} días pactados)
-                  </label>
-                  {attendanceDaysCount > 0 ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full mt-1">
-                      <MapPin className="w-2.5 h-2.5" />
-                      {attendanceDaysCount} asistencias GPS registradas en este periodo
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-400 block mt-0.5">
-                      Sin marcajes GPS en este periodo (se consideran pactados)
-                    </span>
-                  )}
-                </div>
-                <span className="font-mono font-black text-sky-600 dark:text-sky-400 text-base">
+                <label className="font-bold text-slate-700 dark:text-slate-300">
+                  Días Trabajados ({workedDays} / {standardDays} días pactados)
+                </label>
+                <span className="font-mono font-black text-sky-600 dark:text-sky-400 text-sm">
                   {currencySymbol} {earnedBase.toFixed(2)}
                 </span>
               </div>
-
-              {/* Botón de Sincronización Automática con GPS */}
-              {attendanceDaysCount > 0 && attendanceDaysCount !== workedDays && (
-                <button
-                  type="button"
-                  onClick={() => setWorkedDays(attendanceDaysCount)}
-                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer hover:scale-[1.01] active:scale-99"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Sincronizar con Asistencias Reales ({attendanceDaysCount} días = {currencySymbol} {(dailyRate * attendanceDaysCount).toFixed(2)})</span>
-                </button>
-              )}
-
               <input
                 type="range"
                 min="0"

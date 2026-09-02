@@ -12,7 +12,7 @@ import {
   Calendar,
   X,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp, deduplicateEmployees } from '../context/AppContext';
 import { Employee } from '../types';
 
 interface EmployeesViewProps {
@@ -32,7 +32,9 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
 
   const isBossOrAdmin = currentRole === 'SUPERADMIN' || currentRole === 'ADMINISTRADOR';
 
-  const filteredEmployees = employees.filter((emp) => {
+  const distinctEmployees = deduplicateEmployees(employees);
+
+  const filteredEmployees = distinctEmployees.filter((emp) => {
     const matchesSearch =
       emp.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||

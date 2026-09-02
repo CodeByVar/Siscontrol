@@ -164,6 +164,20 @@ const INITIAL_SAVED_EMPLOYEES: Employee[] = [
   },
 ];
 
+// Función de deduplicación estricta por Carnet de Identidad (DNI)
+export const deduplicateEmployees = (list: Employee[]): Employee[] => {
+  const map = new Map<string, Employee>();
+  list.forEach((emp) => {
+    const key = emp.dni ? String(emp.dni).trim() : emp.id;
+    const existing = map.get(key);
+    // Si ya existe uno local (emp-*) y el nuevo tiene UUID oficial de la BD, preferir el de la BD
+    if (!existing || (!emp.id.startsWith('emp-') && existing.id.startsWith('emp-'))) {
+      map.set(key, emp);
+    }
+  });
+  return Array.from(map.values());
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
 
@@ -346,17 +360,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Base de datos de Trabajadores (con guardado inmediato)
+  // Base de datos de Trabajadores (con guardado inmediato y deduplicación por DNI)
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try {
       const saved = localStorage.getItem('importrivero_employees_v5');
       if (saved && JSON.parse(saved).length > 0) {
-        return JSON.parse(saved);
+        return deduplicateEmployees(JSON.parse(saved));
       }
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_SAVED_EMPLOYEES;
+    return deduplicateEmployees(INITIAL_SAVED_EMPLOYEES);
   });
 
   // Adelantos
@@ -472,7 +486,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const remoteEmps = await api.employees.getAll();
         if (Array.isArray(remoteEmps) && remoteEmps.length > 0) {
-          const mappedEmps: Employee[] = remoteEmps.map((e: any) => ({
+          const mappedEmps: Employee[] = deduplicateEmployees(remoteEmps.map((e: any) => ({
             id: e.id,
             dni: e.dni,
             firstName: e.firstName,
@@ -491,7 +505,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             qrImageUrl: e.qrImageUrl || undefined,
             notes: e.notes || undefined,
             createdAt: e.createdAt ? String(e.createdAt).split('T')[0] : undefined,
-          }));
+          })));
           setEmployees(mappedEmps);
           localStorage.setItem('importrivero_employees_v5', JSON.stringify(mappedEmps));
         }
@@ -561,15 +575,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncWithBackend();
   }, []);
 
-  // Sincronización AUTOMÁTICA de trabajadores con periodos abiertos
+  // Sincronización AUTOMÁTICA de trabajadores con periodos abiertos (SIN DUPLICADOS)
   useEffect(() => {
     setPayrollRecords((prevRecords) => {
-      let updatedRecords = [...prevRecords];
+      // 1. Limpiar duplicados previos de prevRecords por (periodId + employee.dni)
+      const cleanPrev: PayrollRecord[] = [];
+      const seenKeys = new Set<string>();
+
+      prevRecords.forEach((r) => {
+        const dni = r.employee?.dni || r.employeeId;
+        const key = `${r.periodId}__${dni}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          cleanPrev.push(r);
+        }
+      });
+
+      let updatedRecords = [...cleanPrev];
 
       const openWeekly = periods.find((p) => p.frequency === 'SEMANAL' && p.status === 'OPEN') || periods.find((p) => p.frequency === 'SEMANAL');
       const openMonthly = periods.find((p) => p.frequency === 'MENSUAL' && p.status === 'OPEN') || periods.find((p) => p.frequency === 'MENSUAL');
 
-      employees.forEach((emp) => {
+      const uniqueEmployees = deduplicateEmployees(employees);
+
+      uniqueEmployees.forEach((emp) => {
         const targetPeriod = emp.paymentFrequency === 'SEMANAL' ? openWeekly : openMonthly;
         if (!targetPeriod) return;
 
@@ -577,12 +606,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const isLunASab = emp.workSchedule === 'LUNES_A_SABADO' || (!emp.workSchedule && isWeekly);
         const standardDays = isWeekly ? (isLunASab ? 6 : 5) : (isLunASab ? 24 : 20);
 
+        // Buscar registro existente por ID o por DNI
         const existingRecord = updatedRecords.find(
-          (r) => r.periodId === targetPeriod.id && r.employeeId === emp.id
+          (r) => r.periodId === targetPeriod.id && (r.employeeId === emp.id || r.employee?.dni === emp.dni)
         );
 
         const pendingAdvances = advances.filter(
-          (a) => a.employeeId === emp.id && a.status === 'PENDING'
+          (a) => (a.employeeId === emp.id || a.employeeDni === emp.dni) && a.status === 'PENDING'
         );
         const advancesSum = pendingAdvances.reduce((acc, a) => acc + Number(a.amount), 0);
 
@@ -638,6 +668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
               return {
                 ...rec,
+                employeeId: emp.id,
                 employee: emp,
                 baseSalary: emp.baseSalary,
                 advancesDeduction: advancesSum,
@@ -651,8 +682,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       });
 
-      localStorage.setItem('importrivero_records_v5', JSON.stringify(updatedRecords));
-      return updatedRecords;
+      // Deduplicación final estricta por (periodId + DNI)
+      const finalRecords: PayrollRecord[] = [];
+      const finalSeen = new Set<string>();
+      updatedRecords.forEach((r) => {
+        const dni = r.employee?.dni || r.employeeId;
+        const key = `${r.periodId}__${dni}`;
+        if (!finalSeen.has(key)) {
+          finalSeen.add(key);
+          finalRecords.push(r);
+        }
+      });
+
+      localStorage.setItem('importrivero_records_v5', JSON.stringify(finalRecords));
+      return finalRecords;
     });
   }, [employees, advances, periods]);
 

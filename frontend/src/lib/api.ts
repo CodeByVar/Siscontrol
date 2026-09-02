@@ -1,7 +1,8 @@
 // Cliente API centralizado para sincronización con Backend en Render / PostgreSQL
 
 export const DEFAULT_BACKEND_URL =
-  import.meta.env.VITE_API_URL || 'https://siscontrol-backend.onrender.com/api';
+  ((import.meta as any).env?.VITE_API_URL as string) ||
+  'https://siscontrol-backend.onrender.com/api';
 
 export const getBackendBaseUrl = (): string => {
   const customUrl = localStorage.getItem('importrivero_backend_url');

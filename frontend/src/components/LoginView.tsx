@@ -8,10 +8,15 @@ import {
   Sparkles,
   ArrowRight,
   KeyRound,
+  Smartphone,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
-export const LoginView: React.FC = () => {
+interface LoginViewProps {
+  onOpenAttendance?: () => void;
+}
+
+export const LoginView: React.FC<LoginViewProps> = ({ onOpenAttendance }) => {
   const { login } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -185,6 +190,28 @@ export const LoginView: React.FC = () => {
                 )}
               </button>
             </form>
+
+            {/* Botón de Acceso Rápido para Trabajadores */}
+            {onOpenAttendance && (
+              <div className="pt-3">
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-slate-800" />
+                  <span className="flex-shrink mx-3 text-[10px] uppercase font-bold text-slate-500">
+                    O personal operativo
+                  </span>
+                  <div className="flex-grow border-t border-slate-800" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onOpenAttendance}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer hover:scale-[1.01] active:scale-99"
+                >
+                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  <span>Marcar Asistencia o Salida con GPS (Sin Contraseña)</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Seguridad y Privacidad */}

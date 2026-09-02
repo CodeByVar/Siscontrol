@@ -65,11 +65,25 @@ export const App: React.FC = () => {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
+
+    // Auto-abrir marcador si la URL tiene ?asistencia o #asistencia
+    if (window.location.search.includes('asistencia') || window.location.hash.includes('asistencia')) {
+      setIsWorkerAttendanceOpen(true);
+    }
+
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   if (!isAuthenticated) {
-    return <LoginView />;
+    return (
+      <>
+        <LoginView onOpenAttendance={() => setIsWorkerAttendanceOpen(true)} />
+        <WorkerAttendanceModal
+          isOpen={isWorkerAttendanceOpen}
+          onClose={() => setIsWorkerAttendanceOpen(false)}
+        />
+      </>
+    );
   }
 
   const handleOpenAddPeriod = (freq: 'SEMANAL' | 'MENSUAL') => {

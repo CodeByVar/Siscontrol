@@ -14,6 +14,9 @@ import {
   LogIn,
   LogOut,
   Navigation,
+  Copy,
+  MessageSquare,
+  Check,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
@@ -49,6 +52,29 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [filterType, setFilterType] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const getAttendanceLink = () => {
+    return `${window.location.origin}/?asistencia=true`;
+  };
+
+  const handleCopyLink = () => {
+    const link = getAttendanceLink();
+    navigator.clipboard.writeText(link);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 3000);
+  };
+
+  const handleShareWhatsApp = () => {
+    const link = getAttendanceLink();
+    const text = encodeURIComponent(
+      `👋 Estimado equipo de Importadora Rivero:\n\n` +
+      `Por favor marquen su asistencia diaria (entrada y salida) ingresando a este enlace oficial:\n` +
+      `👉 ${link}\n\n` +
+      `Solo ingresen su número de Carnet de Identidad (C.I.) y autoricen el GPS de su celular. ¡Gracias!`
+    );
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -126,6 +152,26 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
             className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-brand-500 shadow-sm transition-all"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-brand-500' : ''}`} />
+          </button>
+
+          {/* Botón Copiar Link */}
+          <button
+            onClick={handleCopyLink}
+            title="Copiar enlace para enviar a los trabajadores"
+            className="px-3.5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-brand-500 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer hover:scale-105 active:scale-95"
+          >
+            {copiedLink ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+            <span>{copiedLink ? '¡Enlace Copiado!' : 'Copiar Link Trabajadores'}</span>
+          </button>
+
+          {/* Botón Compartir por WhatsApp */}
+          <button
+            onClick={handleShareWhatsApp}
+            title="Compartir enlace de asistencia por WhatsApp al grupo o trabajadores"
+            className="px-3.5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer hover:scale-105 active:scale-95"
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Compartir por WhatsApp</span>
           </button>
 
           {/* Botón Abrir Marcador Móvil */}

@@ -178,7 +178,7 @@ export const getWorkerPortalData = async (req: Request, res: Response) => {
         totalDeductions: r.totalDeductions,
         netAmount: r.netAmount,
         status: r.status,
-        paymentDate: r.paymentDate,
+        paidAt: r.paidAt,
         items: r.items,
       })),
       advances: employee.advances.map((a) => ({

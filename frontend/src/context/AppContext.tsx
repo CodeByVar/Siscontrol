@@ -9,7 +9,7 @@ import {
   PaymentFrequency,
   PaymentMethod,
 } from '../types';
-import { api, getBackendBaseUrl, setBackendBaseUrl, setAuthToken } from '../lib/api';
+import { api, getBackendBaseUrl, setBackendBaseUrl, setAuthToken, getAuthToken } from '../lib/api';
 
 export interface AppUser {
   name: string;
@@ -287,6 +287,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!isAlive) {
         setBackendStatus('offline');
         return;
+      }
+
+      // Asegurar token de autenticación JWT para peticiones protegidas
+      if (!getAuthToken()) {
+        try {
+          const authRes = await api.auth.login('betito01.hra@gmail.com', '20202020');
+          if (authRes && authRes.token) {
+            setAuthToken(authRes.token);
+          }
+        } catch (e) {
+          console.warn('Auto-login JWT falló:', e);
+        }
       }
 
       // 1. Empleados desde la base de datos

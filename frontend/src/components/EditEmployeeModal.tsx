@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, UserCheck, QrCode, Upload, TrendingUp, Calendar } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Employee, PaymentFrequency, UserRole, EmployeeStatus, WorkSchedule } from '../types';
+import { compressImageFile } from '../lib/imageCompressor';
 
 interface EditEmployeeModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
     phone: '',
     department: 'LOGISTICA' as UserRole,
     position: '',
+    hireDate: '',
     paymentFrequency: 'SEMANAL' as PaymentFrequency,
     workSchedule: 'LUNES_A_SABADO' as WorkSchedule,
     baseSalary: '',
@@ -45,8 +47,9 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
         phone: employee.phone || '',
         department: employee.department,
         position: employee.position,
+        hireDate: employee.hireDate,
         paymentFrequency: employee.paymentFrequency,
-        workSchedule: employee.workSchedule || (employee.paymentFrequency === 'SEMANAL' ? 'LUNES_A_SABADO' : 'LUNES_A_VIERNES'),
+        workSchedule: employee.workSchedule || 'LUNES_A_SABADO',
         baseSalary: String(employee.baseSalary),
         bankName: employee.bankName || '',
         bankAccountNumber: employee.bankAccountNumber || '',
@@ -59,16 +62,22 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
 
   if (!isOpen || !employee) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setFormData((prev) => ({ ...prev, qrImageUrl: base64 }));
-        setQrPreview(base64);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressedBase64 = await compressImageFile(file);
+        setFormData((prev) => ({ ...prev, qrImageUrl: compressedBase64 }));
+        setQrPreview(compressedBase64);
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result as string;
+          setFormData((prev) => ({ ...prev, qrImageUrl: base64 }));
+          setQrPreview(base64);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 

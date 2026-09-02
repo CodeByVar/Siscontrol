@@ -79,9 +79,12 @@ export const createEmployee = async (req: Request, res: Response) => {
     department,
     position,
     paymentFrequency,
+    workSchedule,
     baseSalary,
     bankName,
     bankAccountNumber,
+    qrImageUrl,
+    notes,
   } = req.body;
 
   if (!dni || !firstName || !lastName || !department || !position || !baseSalary) {
@@ -104,9 +107,12 @@ export const createEmployee = async (req: Request, res: Response) => {
         department,
         position,
         paymentFrequency: paymentFrequency || 'SEMANAL',
+        workSchedule: workSchedule || 'LUNES_A_SABADO',
         baseSalary: Number(baseSalary),
         bankName,
         bankAccountNumber,
+        qrImageUrl,
+        notes,
       },
     });
 

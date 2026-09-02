@@ -28,14 +28,21 @@ export const getAdvances = async (req: Request, res: Response) => {
       orderBy: { requestDate: 'desc' },
     });
 
-    return res.json(advances);
+    const formatted = advances.map((a) => ({
+      ...a,
+      amount: Number(a.amount),
+      employeeName: a.employee ? `${a.employee.firstName} ${a.employee.lastName}` : '',
+      employeeDni: a.employee?.dni || '',
+    }));
+
+    return res.json(formatted);
   } catch (error) {
     return res.status(500).json({ error: 'Error al listar adelantos' });
   }
 };
 
 export const createAdvance = async (req: Request, res: Response) => {
-  const { employeeId, amount, reason, notes } = req.body;
+  const { employeeId, amount, reason, notes, paymentMethod } = req.body;
 
   if (!employeeId || !amount || !reason) {
     return res.status(400).json({ error: 'Empleado, monto y motivo son obligatorios' });
@@ -48,12 +55,20 @@ export const createAdvance = async (req: Request, res: Response) => {
         amount: Number(amount),
         reason,
         notes,
+        paymentMethod: paymentMethod || 'EFECTIVO',
         status: 'PENDING',
       },
       include: { employee: true },
     });
 
-    return res.status(201).json(advance);
+    const formatted = {
+      ...advance,
+      amount: Number(advance.amount),
+      employeeName: advance.employee ? `${advance.employee.firstName} ${advance.employee.lastName}` : '',
+      employeeDni: advance.employee?.dni || '',
+    };
+
+    return res.status(201).json(formatted);
   } catch (error) {
     console.error('Error al registrar adelanto:', error);
     return res.status(500).json({ error: 'Error al registrar adelanto' });

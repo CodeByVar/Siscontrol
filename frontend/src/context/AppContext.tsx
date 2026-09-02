@@ -9,6 +9,7 @@ import {
   PaymentFrequency,
   PaymentMethod,
 } from '../types';
+import { api, getBackendBaseUrl, setBackendBaseUrl, setAuthToken } from '../lib/api';
 
 export interface AppUser {
   name: string;
@@ -26,9 +27,15 @@ interface AppContextType {
   currentUser: AppUser | null;
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
-  login: (email: string, pass: string) => boolean;
+  login: (email: string, pass: string) => Promise<boolean> | boolean;
   logout: () => void;
   currencySymbol: string;
+
+  // Backend Sync Status
+  backendStatus: 'connected' | 'connecting' | 'offline';
+  backendUrl: string;
+  setBackendUrl: (url: string) => void;
+  syncWithBackend: () => Promise<void>;
 
   // Data
   employees: Employee[];
@@ -138,8 +145,22 @@ const INITIAL_SAVED_EMPLOYEES: Employee[] = [
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
 
+  // Backend Connection State
+  const [backendStatus, setBackendStatus] = useState<'connected' | 'connecting' | 'offline'>('connecting');
+  const [backendUrl, setBackendUrlState] = useState<string>(getBackendBaseUrl());
+
+  const setBackendUrl = (url: string) => {
+    setBackendBaseUrl(url);
+    setBackendUrlState(getBackendBaseUrl());
+    syncWithBackend();
+  };
+
   // Auth State
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('importrivero_user_clean_v3');
+      if (savedUser) return JSON.parse(savedUser);
+    } catch {}
     return SYSTEM_USERS['betito01.hra@gmail.com'];
   });
 
@@ -156,8 +177,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const login = (email: string, pass: string): boolean => {
+  const login = async (email: string, pass: string): Promise<boolean> => {
     const cleanEmail = email.toLowerCase().trim();
+
+    // 1. Intento con Backend API en PostgreSQL (Render)
+    try {
+      setBackendStatus('connecting');
+      const res = await api.auth.login(cleanEmail, pass);
+      if (res && res.token) {
+        setAuthToken(res.token);
+        const user: AppUser = {
+          name: res.user.name,
+          email: res.user.email,
+          role: (res.user.role as UserRole) || 'SUPERADMIN',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+        };
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+        localStorage.setItem('importrivero_auth_clean_v3', 'true');
+        localStorage.setItem('importrivero_user_clean_v3', JSON.stringify(user));
+        setBackendStatus('connected');
+        syncWithBackend();
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+        return true;
+      }
+    } catch (apiErr) {
+      console.warn('Backend login no respondió, utilizando autenticación local:', apiErr);
+      setBackendStatus('offline');
+    }
+
+    // 2. Fallback de autenticación local si el backend está suspendido o en modo offline
     if (cleanEmail === 'betito01.hra@gmail.com' && pass === '20202020') {
       const user = SYSTEM_USERS['betito01.hra@gmail.com'];
       setCurrentUser(user);
@@ -176,7 +229,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = () => {
     setIsAuthenticated(false);
+    setAuthToken(null);
     localStorage.removeItem('importrivero_auth_clean_v3');
+    localStorage.removeItem('importrivero_user_clean_v3');
   };
 
   const currencySymbol = 'Bs';
@@ -223,6 +278,109 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [];
     }
   });
+
+  // Sincronización completa con el Backend en PostgreSQL (Render)
+  const syncWithBackend = async () => {
+    try {
+      setBackendStatus('connecting');
+      const isAlive = await api.health();
+      if (!isAlive) {
+        setBackendStatus('offline');
+        return;
+      }
+
+      // 1. Empleados desde la base de datos
+      try {
+        const remoteEmps = await api.employees.getAll();
+        if (Array.isArray(remoteEmps) && remoteEmps.length > 0) {
+          const mappedEmps: Employee[] = remoteEmps.map((e: any) => ({
+            id: e.id,
+            dni: e.dni,
+            firstName: e.firstName,
+            lastName: e.lastName,
+            email: e.email || undefined,
+            phone: e.phone || undefined,
+            department: e.department,
+            position: e.position,
+            hireDate: e.hireDate ? String(e.hireDate).split('T')[0] : '2026-09-01',
+            status: e.status || 'ACTIVE',
+            paymentFrequency: e.paymentFrequency || 'SEMANAL',
+            workSchedule: e.workSchedule || 'LUNES_A_SABADO',
+            baseSalary: Number(e.baseSalary),
+            bankName: e.bankName || undefined,
+            bankAccountNumber: e.bankAccountNumber || undefined,
+            qrImageUrl: e.qrImageUrl || undefined,
+            notes: e.notes || undefined,
+            createdAt: e.createdAt ? String(e.createdAt).split('T')[0] : undefined,
+          }));
+          setEmployees(mappedEmps);
+          localStorage.setItem('importrivero_employees_v5', JSON.stringify(mappedEmps));
+        }
+      } catch (err) {
+        console.warn('No se pudieron obtener empleados de la nube:', err);
+      }
+
+      // 2. Adelantos desde la base de datos
+      try {
+        const remoteAdvs = await api.advances.getAll();
+        if (Array.isArray(remoteAdvs)) {
+          const mappedAdvs: Advance[] = remoteAdvs.map((a: any) => ({
+            id: a.id,
+            employeeId: a.employeeId,
+            employeeName: a.employeeName || (a.employee ? `${a.employee.firstName} ${a.employee.lastName}` : ''),
+            employeeDni: a.employeeDni || a.employee?.dni || '',
+            amount: Number(a.amount),
+            reason: a.reason,
+            requestDate: a.requestDate ? String(a.requestDate).split('T')[0] : '',
+            deductedDate: a.deductedDate ? String(a.deductedDate).split('T')[0] : undefined,
+            status: a.status,
+            payrollRecordId: a.payrollRecordId || undefined,
+            paymentMethod: a.paymentMethod || undefined,
+            notes: a.notes || undefined,
+          }));
+          setAdvances(mappedAdvs);
+          localStorage.setItem('importrivero_advances_v5', JSON.stringify(mappedAdvs));
+        }
+      } catch (err) {
+        console.warn('No se pudieron obtener adelantos de la nube:', err);
+      }
+
+      // 3. Periodos desde la base de datos
+      try {
+        const remotePeriods = await api.periods.getAll();
+        if (Array.isArray(remotePeriods) && remotePeriods.length > 0) {
+          const mappedPeriods: PayrollPeriod[] = remotePeriods.map((p: any) => ({
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            frequency: p.frequency,
+            startDate: String(p.startDate).split('T')[0],
+            endDate: String(p.endDate).split('T')[0],
+            year: p.year,
+            periodNumber: p.periodNumber,
+            status: p.status,
+            totalGross: Number(p.totalGross || 0),
+            totalNet: Number(p.totalNet || 0),
+            totalAdvances: Number(p.totalAdvances || 0),
+          }));
+          setPeriods(mappedPeriods);
+          localStorage.setItem('importrivero_periods_v5', JSON.stringify(mappedPeriods));
+        }
+      } catch (err) {
+        console.warn('No se pudieron obtener periodos de la nube:', err);
+      }
+
+      setBackendStatus('connected');
+    } catch (e) {
+      console.warn('Fallo en sincronización con backend:', e);
+      setBackendStatus('offline');
+    }
+  };
+
+  // Al cargar la app, comprobar salud del backend y sincronizar
+  useEffect(() => {
+    syncWithBackend();
+  }, []);
 
   // Sincronización AUTOMÁTICA de trabajadores con periodos abiertos
   useEffect(() => {
@@ -352,10 +510,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [theme]);
 
   // Acciones de Empleados
-  const addEmployee = (empData: Omit<Employee, 'id' | 'createdAt'>) => {
+  const addEmployee = async (empData: Omit<Employee, 'id' | 'createdAt'>) => {
+    const tempId = `emp-${Date.now()}`;
     const newEmp: Employee = {
       ...empData,
-      id: `emp-${Date.now()}`,
+      id: tempId,
       createdAt: new Date().toISOString().split('T')[0],
       qrImageUrl: empData.qrImageUrl || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=SIMPLE_QR_${empData.firstName.toUpperCase()}_${empData.lastName.toUpperCase()}_${empData.dni}_BS`,
     };
@@ -371,9 +530,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       spread: 60,
       origin: { y: 0.8 },
     });
+
+    try {
+      const created = await api.employees.create(empData);
+      if (created && created.id) {
+        setEmployees((prev) => {
+          const updated = prev.map((e) => (e.id === tempId ? { ...newEmp, id: created.id } : e));
+          localStorage.setItem('importrivero_employees_v5', JSON.stringify(updated));
+          return updated;
+        });
+        setBackendStatus('connected');
+      }
+    } catch (err) {
+      console.warn('Empleado guardado localmente, backend no disponible:', err);
+    }
   };
 
-  const updateEmployee = (id: string, updatedData: Partial<Employee>) => {
+  const updateEmployee = async (id: string, updatedData: Partial<Employee>) => {
     setEmployees((prev) => {
       const updated = prev.map((emp) => (emp.id === id ? { ...emp, ...updatedData } : emp));
       localStorage.setItem('importrivero_employees_v5', JSON.stringify(updated));
@@ -385,9 +558,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       spread: 50,
       origin: { y: 0.7 },
     });
+
+    try {
+      await api.employees.update(id, updatedData);
+    } catch (err) {
+      console.warn('Actualización de empleado guardada localmente:', err);
+    }
   };
 
-  const deleteEmployee = (id: string) => {
+  const deleteEmployee = async (id: string) => {
     setEmployees((prev) => {
       const updated = prev.filter((e) => e.id !== id);
       localStorage.setItem('importrivero_employees_v5', JSON.stringify(updated));
@@ -398,10 +577,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('importrivero_records_v5', JSON.stringify(updated));
       return updated;
     });
+
+    try {
+      await api.employees.delete(id);
+    } catch (err) {
+      console.warn('Eliminación de empleado procesada localmente:', err);
+    }
   };
 
   // Acciones de Adelantos
-  const addAdvance = (advData: {
+  const addAdvance = async (advData: {
     employeeId: string;
     amount: number;
     reason: string;
@@ -412,8 +597,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod?: PaymentMethod;
   }) => {
     const emp = employees.find((e) => e.id === advData.employeeId);
+    const tempId = `adv-${Date.now()}`;
     const newAdv: Advance = {
-      id: `adv-${Date.now()}`,
+      id: tempId,
       employeeId: advData.employeeId,
       employeeName: advData.employeeName || (emp ? `${emp.firstName} ${emp.lastName}` : 'Desconocido'),
       employeeDni: advData.employeeDni || emp?.dni || '',
@@ -435,21 +621,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       spread: 50,
       origin: { y: 0.7 },
     });
+
+    try {
+      const created = await api.advances.create(advData);
+      if (created && created.id) {
+        setAdvances((prev) => {
+          const updated = prev.map((a) => (a.id === tempId ? { ...newAdv, id: created.id } : a));
+          localStorage.setItem('importrivero_advances_v5', JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.warn('Adelanto guardado localmente:', err);
+    }
   };
 
-  const deleteAdvance = (id: string) => {
+  const deleteAdvance = async (id: string) => {
     setAdvances((prev) => {
       const updated = prev.filter((a) => a.id !== id);
       localStorage.setItem('importrivero_advances_v5', JSON.stringify(updated));
       return updated;
     });
+
+    try {
+      await api.advances.delete(id);
+    } catch (err) {
+      console.warn('Eliminación de adelanto procesada localmente:', err);
+    }
   };
 
   // Acciones de Periodos
-  const addPeriod = (periodData: Omit<PayrollPeriod, 'id' | 'status' | 'totalGross' | 'totalNet' | 'totalAdvances'>) => {
+  const addPeriod = async (periodData: Omit<PayrollPeriod, 'id' | 'status' | 'totalGross' | 'totalNet' | 'totalAdvances'>) => {
+    const tempId = `per-${Date.now()}`;
     const newPeriod: PayrollPeriod = {
       ...periodData,
-      id: `per-${Date.now()}`,
+      id: tempId,
       status: 'OPEN',
       totalGross: 0,
       totalNet: 0,
@@ -461,6 +667,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('importrivero_periods_v5', JSON.stringify(updated));
       return updated;
     });
+
+    confetti({
+      particleCount: 60,
+      spread: 70,
+      origin: { y: 0.7 },
+    });
+
+    try {
+      const created = await api.periods.create(periodData);
+      if (created && created.id) {
+        setPeriods((prev) => {
+          const updated = prev.map((p) => (p.id === tempId ? { ...newPeriod, id: created.id } : p));
+          localStorage.setItem('importrivero_periods_v5', JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.warn('Periodo guardado localmente:', err);
+    }
 
     confetti({
       particleCount: 60,
@@ -740,6 +965,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         login,
         logout,
         currencySymbol,
+        backendStatus,
+        backendUrl,
+        setBackendUrl,
+        syncWithBackend,
         employees,
         advances,
         periods,

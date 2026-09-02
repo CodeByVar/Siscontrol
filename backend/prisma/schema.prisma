@@ -78,9 +78,12 @@ model Employee {
   
   // Información de pago
   paymentFrequency PaymentFrequency @default(SEMANAL)
+  workSchedule     String?          @default("LUNES_A_SABADO")
   baseSalary       Decimal          @db.Decimal(10, 2)
   bankName         String?
   bankAccountNumber String?
+  qrImageUrl       String?
+  notes            String?
 
   userId          String?          @unique
   user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -101,6 +104,7 @@ model Advance {
   requestDate DateTime      @default(now())
   status      AdvanceStatus @default(PENDING)
   notes       String?
+  paymentMethod String?     @default("EFECTIVO")
 
   payrollRecordId String?
   payrollRecord   PayrollRecord? @relation(fields: [payrollRecordId], references: [id], onDelete: SetNull)

@@ -19,28 +19,33 @@ export const LoginView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      const success = login(email, password);
+    try {
+      const success = await login(email, password);
       if (!success) {
         setErrorMessage('Credenciales incorrectas. Verifica el correo o la contraseña.');
         setIsLoading(false);
       }
-    }, 300);
+    } catch {
+      setErrorMessage('Error al conectar. Verifica tu conexión.');
+      setIsLoading(false);
+    }
   };
 
-  const handleQuickLoginAdmin = () => {
+  const handleQuickLoginAdmin = async () => {
     setEmail('betito01.hra@gmail.com');
     setPassword('20202020');
     setErrorMessage('');
     setIsLoading(true);
-    setTimeout(() => {
-      login('betito01.hra@gmail.com', '20202020');
-    }, 200);
+    try {
+      await login('betito01.hra@gmail.com', '20202020');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

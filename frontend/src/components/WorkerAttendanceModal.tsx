@@ -749,92 +749,282 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
             )}
 
             {/* Paso 3: Ver Datos Salariales & Boletas */}
-            {pinStep === 'VIEW_DATA' && portalData && (
-              <div className="space-y-4 animate-in fade-in duration-150">
-                {/* Encabezado del Trabajador */}
-                <div className="p-4 rounded-3xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-black text-slate-900 dark:text-white">
-                      {portalData.employee.firstName} {portalData.employee.lastName}
-                    </h4>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {portalData.employee.position} &bull; Modalidad {portalData.employee.paymentFrequency}
-                    </span>
+            {pinStep === 'VIEW_DATA' && portalData && (() => {
+              const countdown = (() => {
+                const today = new Date();
+                const isWeekly = portalData.employee.paymentFrequency === 'SEMANAL';
+                if (isWeekly) {
+                  const currentDay = today.getDay(); // 0=Dom, ..., 6=Sab
+                  let daysLeft = 6 - currentDay;
+                  if (daysLeft < 0) daysLeft = 6;
+                  const percent = Math.min(100, Math.max(15, Math.round(((6 - daysLeft) / 6) * 100)));
+                  return {
+                    title: 'Próximo Pago Semanal',
+                    targetDate: daysLeft === 0 ? '¡Hoy Sábado es día de pago! 🎉' : 'Este Sábado',
+                    daysLeft,
+                    percent,
+                    isToday: daysLeft === 0,
+                  };
+                } else {
+                  const year = today.getFullYear();
+                  const month = today.getMonth();
+                  const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+                  const currentDayOfMonth = today.getDate();
+                  const daysLeft = Math.max(0, lastDayOfMonth - currentDayOfMonth);
+                  const percent = Math.min(100, Math.max(10, Math.round((currentDayOfMonth / lastDayOfMonth) * 100)));
+                  const monthName = today.toLocaleDateString('es-BO', { month: 'long' });
+                  return {
+                    title: 'Próximo Pago Mensual',
+                    targetDate: daysLeft === 0 ? '¡Hoy fin de mes!' : `Fin de ${monthName} (${lastDayOfMonth} de ${monthName})`,
+                    daysLeft,
+                    percent,
+                    isToday: daysLeft === 0,
+                  };
+                }
+              })();
+
+              const handleDownloadPDF = (rec: any) => {
+                const fullRecord: any = {
+                  id: rec.id,
+                  periodId: rec.periodId,
+                  employeeId: portalData.employee.id,
+                  employee: portalData.employee,
+                  baseSalary: Number(portalData.employee.baseSalary),
+                  workedDays: rec.workedDays,
+                  overtimeHours: rec.overtimeHours || 0,
+                  overtimeAmount: rec.overtimeAmount || 0,
+                  bonusesAmount: rec.bonusesAmount || 0,
+                  advancesDeduction: rec.advancesDeduction || 0,
+                  otherDeductions: rec.otherDeductions || 0,
+                  totalEarnings: rec.totalEarnings || portalData.employee.baseSalary,
+                  totalDeductions: rec.totalDeductions || 0,
+                  netAmount: rec.netAmount,
+                  status: rec.status,
+                  items: rec.items || [],
+                };
+
+                const fullPeriod: any = {
+                  id: rec.periodId,
+                  code: rec.periodCode || 'RECIBO',
+                  name: rec.periodName || 'Periodo de Pago',
+                  frequency: portalData.employee.paymentFrequency,
+                  startDate: rec.startDate ? String(rec.startDate).split('T')[0] : '2026-09-01',
+                  endDate: rec.endDate ? String(rec.endDate).split('T')[0] : '2026-09-30',
+                  year: 2026,
+                  periodNumber: 1,
+                  status: rec.periodStatus || 'OPEN',
+                };
+
+                generatePayslipPDF(fullRecord, fullPeriod);
+              };
+
+              return (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  {/* Encabezado del Trabajador */}
+                  <div className="p-4 rounded-3xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                        {portalData.employee.firstName} {portalData.employee.lastName}
+                      </h4>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {portalData.employee.position} &bull; Modalidad {portalData.employee.paymentFrequency}
+                      </span>
+                    </div>
+                    <button
+                      onClick={resetPortalForm}
+                      className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-300 cursor-pointer"
+                    >
+                      Cerrar Sesión
+                    </button>
                   </div>
-                  <button
-                    onClick={resetPortalForm}
-                    className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-300"
-                  >
-                    Salir de Consulta
-                  </button>
-                </div>
 
-                {/* Recibos de Pago Recientes */}
-                <div className="space-y-2.5">
-                  <h5 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-brand-500" />
-                    Mis Recibos y Boletas de Pago
-                  </h5>
+                  {/* 1. Tarjeta Cuenta Regresiva: ¿Cuándo cobro? */}
+                  <div className="p-4 rounded-3xl bg-gradient-to-r from-brand-600 via-sky-600 to-indigo-600 text-white shadow-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-sky-100 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5" />
+                        {countdown.title}
+                      </span>
+                      <span className="text-xs font-black bg-white/20 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
+                        {countdown.targetDate}
+                      </span>
+                    </div>
 
-                  {portalData.payrollRecords && portalData.payrollRecords.length > 0 ? (
-                    portalData.payrollRecords.map((rec) => (
-                      <div
-                        key={rec.id}
-                        className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3 text-xs"
-                      >
-                        <div>
-                          <span className="font-black text-slate-900 dark:text-white block">
-                            {rec.periodName}
-                          </span>
-                          <span className="text-[11px] text-slate-500 font-mono">
-                            Días trabajados: {rec.workedDays} &bull; Líquido: <strong className="text-emerald-600 dark:text-emerald-400">{currencySymbol} {Number(rec.netAmount).toFixed(2)}</strong>
-                          </span>
-                        </div>
-
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-black shrink-0 ${
-                            rec.status === 'PAID'
-                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                              : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                          }`}
-                        >
-                          {rec.status === 'PAID' ? 'PAGADO' : 'PENDIENTE'}
-                        </span>
+                    <div className="flex items-baseline justify-between pt-1">
+                      <div>
+                        {countdown.isToday ? (
+                          <span className="text-xl font-black text-white">¡Día de Liquidación!</span>
+                        ) : (
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-2xl font-black">{countdown.daysLeft}</span>
+                            <span className="text-xs text-sky-100 font-bold">
+                              {countdown.daysLeft === 1 ? 'día restante' : 'días restantes'}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    ))
-                  ) : (
-                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center text-xs text-slate-400">
-                      Aún no tienes recibos de nómina liquidados en este periodo.
+                      <span className="text-xs font-bold text-sky-100">
+                        Sueldo Base: {currencySymbol} {Number(portalData.employee.baseSalary).toFixed(2)}
+                      </span>
+                    </div>
+
+                    {/* Barra de Progreso del Ciclo */}
+                    <div className="w-full bg-black/20 rounded-full h-1.5 overflow-hidden mt-1">
+                      <div
+                        className="bg-white h-full rounded-full transition-all duration-500"
+                        style={{ width: `${countdown.percent}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 2. Recibos de Pago y Descarga de Boleta PDF */}
+                  <div className="space-y-2.5">
+                    <h5 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-brand-500" />
+                      Mis Recibos y Boletas de Pago
+                    </h5>
+
+                    {portalData.payrollRecords && portalData.payrollRecords.length > 0 ? (
+                      portalData.payrollRecords.map((rec) => (
+                        <div
+                          key={rec.id}
+                          className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div>
+                            <span className="font-black text-slate-900 dark:text-white block">
+                              {rec.periodName}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-mono">
+                              Días asistidos: {rec.workedDays} &bull; Líquido: <strong className="text-emerald-600 dark:text-emerald-400">{currencySymbol} {Number(rec.netAmount).toFixed(2)}</strong>
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
+                                rec.status === 'PAID'
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                              }`}
+                            >
+                              {rec.status === 'PAID' ? 'PAGADO' : 'EN CURSO'}
+                            </span>
+
+                            {/* Botón Descargar Boleta en PDF */}
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadPDF(rec)}
+                              title="Descargar Boleta de Pago en PDF"
+                              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-500 hover:text-white text-slate-600 dark:text-slate-300 transition-all border border-slate-200 dark:border-slate-700 cursor-pointer shadow-xs"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center text-xs text-slate-400">
+                        Aún no tienes recibos de nómina liquidados en este periodo.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. Historial de Marcajes y Asistencias GPS */}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between">
+                      <h5 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-emerald-500" />
+                        Mis Asistencias Registradas (GPS)
+                      </h5>
+                      <span className="text-[10px] text-slate-400 font-bold">
+                        {portalData.attendances?.length || 0} marcajes
+                      </span>
+                    </div>
+
+                    {portalData.attendances && portalData.attendances.length > 0 ? (
+                      <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                        {portalData.attendances.map((att) => {
+                          const attDate = new Date(att.timestamp);
+                          const isToday = attDate.toDateString() === new Date().toDateString();
+                          const dateStr = isToday
+                            ? 'Hoy'
+                            : attDate.toLocaleDateString('es-BO', { weekday: 'short', day: 'numeric', month: 'short' });
+                          const timeStr = attDate.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' });
+
+                          return (
+                            <div
+                              key={att.id}
+                              className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between text-xs"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className={`p-1 rounded-lg ${
+                                  att.type === 'CHECK_IN'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                                }`}>
+                                  {att.type === 'CHECK_IN' ? <LogIn className="w-3 h-3" /> : <LogOut className="w-3 h-3" />}
+                                </div>
+                                <div>
+                                  <span className="font-bold text-slate-900 dark:text-white block">
+                                    {att.type === 'CHECK_IN' ? 'Entrada Registrada' : 'Salida Registrada'}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {dateStr} &bull; {timeStr}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {att.latitude && att.longitude ? (
+                                <a
+                                  href={`https://www.google.com/maps?q=${att.latitude},${att.longitude}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-sky-500 hover:text-sky-600 font-bold flex items-center gap-1 bg-sky-500/10 px-2 py-0.5 rounded-lg"
+                                >
+                                  <MapPin className="w-2.5 h-2.5" />
+                                  <span>Mapa</span>
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 font-mono">Hora oficial</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-center text-xs text-slate-400">
+                        Aún no tienes marcajes de asistencia registrados.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4. Anticipos y Vales */}
+                  {portalData.advances && portalData.advances.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      <h5 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <DollarSign className="w-3.5 h-3.5 text-amber-500" />
+                        Anticipos y Vales
+                      </h5>
+                      <div className="space-y-1.5">
+                        {portalData.advances.map((adv) => (
+                          <div
+                            key={adv.id}
+                            className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs"
+                          >
+                            <span className="text-slate-600 dark:text-slate-300 font-medium">
+                              {adv.reason}
+                            </span>
+                            <span className="font-bold text-amber-600 dark:text-amber-400 font-mono">
+                              {currencySymbol} {Number(adv.amount).toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {/* Anticipos Activos */}
-                {portalData.advances && portalData.advances.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    <h5 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <DollarSign className="w-3.5 h-3.5 text-amber-500" />
-                      Anticipos y Vales
-                    </h5>
-                    <div className="space-y-1.5">
-                      {portalData.advances.map((adv) => (
-                        <div
-                          key={adv.id}
-                          className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs"
-                        >
-                          <span className="text-slate-600 dark:text-slate-300 font-medium">
-                            {adv.reason}
-                          </span>
-                          <span className="font-bold text-amber-600 dark:text-amber-400 font-mono">
-                            {currencySymbol} {Number(adv.amount).toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 

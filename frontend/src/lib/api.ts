@@ -205,4 +205,49 @@ export const api = {
       });
     },
   },
+
+  // Control de Asistencias & GPS
+  attendance: {
+    verifyWorker: async (dni: string) => {
+      return request<{
+        employee: any;
+        latestAttendanceToday?: any;
+        suggestedNextType: 'CHECK_IN' | 'CHECK_OUT';
+      }>(`/attendance/worker/${encodeURIComponent(dni)}`);
+    },
+    record: async (data: {
+      dni: string;
+      type?: 'CHECK_IN' | 'CHECK_OUT';
+      latitude?: number | null;
+      longitude?: number | null;
+      accuracy?: number | null;
+      deviceInfo?: string;
+      notes?: string;
+    }) => {
+      return request<{
+        message: string;
+        attendance: any;
+      }>('/attendance/check', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    getAll: async (date?: string, employeeId?: string) => {
+      const params = new URLSearchParams();
+      if (date) params.append('date', date);
+      if (employeeId) params.append('employeeId', employeeId);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      return request<any[]>(`/attendance${query}`);
+    },
+    getTodaySummary: async () => {
+      return request<{
+        totalEmployees: number;
+        presentNow: number;
+        finishedDay: number;
+        absentToday: number;
+        totalCheckedInToday: number;
+        records: any[];
+      }>('/attendance/today-summary');
+    },
+  },
 };

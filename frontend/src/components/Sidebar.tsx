@@ -7,10 +7,11 @@ import {
   HandCoins,
   FileSpreadsheet,
   ShieldAlert,
+  Clock,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
-export type NavTab = 'dashboard' | 'weekly' | 'monthly' | 'employees' | 'advances' | 'reports';
+export type NavTab = 'dashboard' | 'weekly' | 'monthly' | 'employees' | 'advances' | 'attendance' | 'reports';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -59,6 +60,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       icon: HandCoins,
       badge: pendingAdvancesCount > 0 ? `${pendingAdvancesCount} Pend.` : undefined,
       badgeColor: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
+      roles: ['SUPERADMIN', 'ADMINISTRADOR', 'OFICINA', 'VENTAS', 'LOGISTICA'],
+    },
+    {
+      id: 'attendance' as NavTab,
+      label: 'Asistencias & GPS',
+      icon: Clock,
+      badge: 'GPS',
+      badgeColor: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
       roles: ['SUPERADMIN', 'ADMINISTRADOR', 'OFICINA', 'VENTAS', 'LOGISTICA'],
     },
     {

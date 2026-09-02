@@ -96,3 +96,20 @@ export interface PayrollRecord {
   paymentDate?: string;
   items: PayrollItem[];
 }
+
+export type AttendanceType = 'CHECK_IN' | 'CHECK_OUT';
+
+export interface AttendanceRecord {
+  id: string;
+  employeeId: string;
+  employee?: Employee;
+  type: AttendanceType;
+  timestamp: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy?: number | null;
+  deviceInfo?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+}
+

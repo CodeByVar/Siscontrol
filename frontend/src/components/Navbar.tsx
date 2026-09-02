@@ -15,6 +15,7 @@ import {
   KeyRound,
   ShieldAlert,
   CheckCircle2,
+  Smartphone,
 } from 'lucide-react';
 import { useApp, SYSTEM_USERS } from '../context/AppContext';
 import { Logo } from './Logo';
@@ -23,11 +24,13 @@ import { ChangePasswordModal } from './ChangePasswordModal';
 interface NavbarProps {
   onOpenSearch?: () => void;
   onOpenNotifications?: () => void;
+  onOpenAttendance?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenSearch,
   onOpenNotifications,
+  onOpenAttendance,
 }) => {
   const {
     currentRole,
@@ -109,6 +112,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden sm:inline">Modo Local</span>
             </>
           )}
+        </button>
+
+        {/* Botón de Marcador Móvil de Asistencias (C.I. + GPS) */}
+        <button
+          onClick={onOpenAttendance}
+          title="Marcador Móvil de Asistencia (C.I. + GPS)"
+          className="px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-brand-500 hover:border-brand-500 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer hover:scale-105 active:scale-95 text-xs font-bold"
+        >
+          <Smartphone className="w-3.5 h-3.5 text-brand-500" />
+          <span className="hidden md:inline">Marcar Asistencia</span>
         </button>
 
         {/* Search Icon Button (Active) */}

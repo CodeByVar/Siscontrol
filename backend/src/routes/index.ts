@@ -1,3 +1,4 @@
+import { Router } from 'express';
 import { login, getProfile, changePassword } from '../controllers/auth.controller';
 import {
   getEmployees,
@@ -21,12 +22,20 @@ import {
   deleteAdvance,
 } from '../controllers/advance.controller';
 import { getDashboardMetrics } from '../controllers/dashboard.controller';
+import {
+  verifyWorkerByDni,
+  recordAttendance,
+  getAttendances,
+  getTodaySummary,
+} from '../controllers/attendance.controller';
 import { authenticateJWT, requireRoles } from '../middlewares/auth';
 
 const router = Router();
 
-// Rutas Públicas
+// Rutas Públicas (Sin Token)
 router.post('/auth/login', login);
+router.get('/attendance/worker/:dni', verifyWorkerByDni);
+router.post('/attendance/check', recordAttendance);
 
 // Rutas Protegidas (Requieren Token)
 router.use(authenticateJWT);
@@ -34,6 +43,10 @@ router.use(authenticateJWT);
 // Perfil y Seguridad
 router.get('/auth/profile', getProfile);
 router.post('/auth/change-password', changePassword);
+
+// Control de Asistencias & GPS (Acceso: SUPERADMIN, ADMINISTRADOR, OFICINA)
+router.get('/attendance', requireRoles(['SUPERADMIN', 'ADMINISTRADOR', 'OFICINA']), getAttendances);
+router.get('/attendance/today-summary', requireRoles(['SUPERADMIN', 'ADMINISTRADOR', 'OFICINA']), getTodaySummary);
 
 // Dashboard (Acceso: SUPERADMIN, ADMINISTRADOR, OFICINA)
 router.get(

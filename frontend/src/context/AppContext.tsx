@@ -8,6 +8,8 @@ import {
   UserRole,
   PaymentFrequency,
   PaymentMethod,
+  AttendanceRecord,
+  AttendanceType,
 } from '../types';
 import { api, getBackendBaseUrl, setBackendBaseUrl, setAuthToken, getAuthToken } from '../lib/api';
 
@@ -50,6 +52,18 @@ interface AppContextType {
   advances: Advance[];
   periods: PayrollPeriod[];
   payrollRecords: PayrollRecord[];
+  attendances: AttendanceRecord[];
+
+  // Attendance Actions
+  fetchAttendances: (date?: string) => Promise<void>;
+  recordAttendanceCheck: (data: {
+    dni: string;
+    type?: AttendanceType;
+    latitude?: number | null;
+    longitude?: number | null;
+    accuracy?: number | null;
+    notes?: string;
+  }) => Promise<{ success: boolean; message: string; data?: any }>;
 
   // Actions
   addEmployee: (emp: Omit<Employee, 'id' | 'createdAt'>) => void;
@@ -374,6 +388,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [];
     }
   });
+
+  // Asistencias & Marcajes GPS
+  const [attendances, setAttendances] = useState<AttendanceRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('importrivero_attendances_v1');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const fetchAttendances = async (date?: string) => {
+    try {
+      const remote = await api.attendance.getAll(date);
+      if (Array.isArray(remote)) {
+        setAttendances(remote);
+        localStorage.setItem('importrivero_attendances_v1', JSON.stringify(remote));
+      }
+    } catch (err) {
+      console.warn('Error al cargar asistencias de la nube:', err);
+    }
+  };
+
+  const recordAttendanceCheck = async (data: {
+    dni: string;
+    type?: AttendanceType;
+    latitude?: number | null;
+    longitude?: number | null;
+    accuracy?: number | null;
+    notes?: string;
+  }): Promise<{ success: boolean; message: string; data?: any }> => {
+    try {
+      const res = await api.attendance.record(data);
+      confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+      await fetchAttendances();
+      return { success: true, message: res.message, data: res.attendance };
+    } catch (err: any) {
+      const emp = employees.find((e) => e.dni === data.dni);
+      if (emp) {
+        const localAtt: AttendanceRecord = {
+          id: `att-${Date.now()}`,
+          employeeId: emp.id,
+          employee: emp,
+          type: data.type || 'CHECK_IN',
+          timestamp: new Date().toISOString(),
+          latitude: data.latitude,
+          longitude: data.longitude,
+          accuracy: data.accuracy,
+          notes: data.notes,
+        };
+        setAttendances((prev) => [localAtt, ...prev]);
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+        return { success: true, message: 'Marcaje guardado correctamente (Modo local)', data: localAtt };
+      }
+      return { success: false, message: err.message || 'Error al registrar marcaje' };
+    }
+  };
 
   // Sincronización completa con el Backend en PostgreSQL (Render)
   const syncWithBackend = async () => {
@@ -1095,6 +1166,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         advances,
         periods,
         payrollRecords,
+        attendances,
+        fetchAttendances,
+        recordAttendanceCheck,
         addEmployee,
         updateEmployee,
         deleteEmployee,

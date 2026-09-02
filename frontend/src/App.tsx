@@ -6,8 +6,10 @@ import { EmployeesView } from './components/EmployeesView';
 import { WeeklyPayrollView } from './components/WeeklyPayrollView';
 import { MonthlyPayrollView } from './components/MonthlyPayrollView';
 import { AdvancesView } from './components/AdvancesView';
+import { AttendanceAdminView } from './components/AttendanceAdminView';
 import { ReportsView } from './components/ReportsView';
 import { LoginView } from './components/LoginView';
+import { WorkerAttendanceModal } from './components/WorkerAttendanceModal';
 import { AddEmployeeModal } from './components/AddEmployeeModal';
 import { EditEmployeeModal } from './components/EditEmployeeModal';
 import { AddAdvanceModal } from './components/AddAdvanceModal';
@@ -34,6 +36,7 @@ export const App: React.FC = () => {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [isAddAdvanceOpen, setIsAddAdvanceOpen] = useState(false);
   const [isAddPeriodOpen, setIsAddPeriodOpen] = useState(false);
+  const [isWorkerAttendanceOpen, setIsWorkerAttendanceOpen] = useState(false);
   const [periodFreqForModal, setPeriodFreqForModal] = useState<'SEMANAL' | 'MENSUAL'>('SEMANAL');
 
   // Drawer & Payslip & Payment QR Data
@@ -96,6 +99,7 @@ export const App: React.FC = () => {
       <Navbar
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
+        onOpenAttendance={() => setIsWorkerAttendanceOpen(true)}
       />
 
       {/* Container Principal */}
@@ -140,6 +144,10 @@ export const App: React.FC = () => {
 
           {activeTab === 'advances' && (
             <AdvancesView openAddAdvanceModal={() => setIsAddAdvanceOpen(true)} />
+          )}
+
+          {activeTab === 'attendance' && (
+            <AttendanceAdminView onOpenWorkerModal={() => setIsWorkerAttendanceOpen(true)} />
           )}
 
           {activeTab === 'reports' && <ReportsView />}
@@ -216,6 +224,12 @@ export const App: React.FC = () => {
         onClose={() => setPayslipModalData({ record: null, period: null })}
         record={payslipModalData.record}
         period={payslipModalData.period}
+      />
+
+      {/* Modal / Portal Móvil de Marcaje de Asistencias (C.I. + GPS) */}
+      <WorkerAttendanceModal
+        isOpen={isWorkerAttendanceOpen}
+        onClose={() => setIsWorkerAttendanceOpen(false)}
       />
     </div>
   );

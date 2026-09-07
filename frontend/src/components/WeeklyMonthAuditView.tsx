@@ -82,6 +82,17 @@ export const WeeklyMonthAuditView: React.FC<WeeklyMonthAuditViewProps> = ({
   const monthName = MONTH_NAMES[selectedMonthIndex];
   const monthLabel = `${monthName} ${selectedYear}`;
 
+  // Determinar cuál semana del mes corresponde al día de hoy
+  const currentCalendarWeekIndex = useMemo(() => {
+    const today = new Date();
+    if (today.getFullYear() === selectedYear && today.getMonth() === selectedMonthIndex) {
+      const currentDay = today.getDate();
+      const match = monthSundays.find((s) => s.dayNumber >= currentDay);
+      return match ? match.weekIndex : monthSundays.length;
+    }
+    return null;
+  }, [selectedYear, selectedMonthIndex, monthSundays]);
+
   // Filtrar trabajadores con modalidad semanal
   const weeklyEmployees = useMemo(() => {
     return deduplicateEmployees(
@@ -311,6 +322,12 @@ export const WeeklyMonthAuditView: React.FC<WeeklyMonthAuditViewProps> = ({
                 ? 'Mes largo de 5 cortes semanales: El presupuesto de nómina para almacén y choferes contempla 5 pagos en total.'
                 : 'Mes estándar de 4 cortes semanales: Cada trabajador semanal tiene 4 liquidaciones en el mes.'}
             </p>
+            {currentCalendarWeekIndex && (
+              <div className="inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-0.5 rounded-lg bg-white/80 dark:bg-slate-900/80 font-bold text-[11px] text-slate-800 dark:text-slate-200 border border-current/20 shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Transcurriendo actualmente: <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">Semana {currentCalendarWeekIndex} de {totalWeeksInMonth}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -406,15 +423,48 @@ export const WeeklyMonthAuditView: React.FC<WeeklyMonthAuditViewProps> = ({
               <tr>
                 <th className="px-4 py-3.5">Trabajador & Cargo</th>
                 <th className="px-3 py-3.5 text-right">Sueldo Base Semanal</th>
-                <th className="px-3 py-3.5 text-center">Semana 1</th>
-                <th className="px-3 py-3.5 text-center">Semana 2</th>
-                <th className="px-3 py-3.5 text-center">Semana 3</th>
-                <th className="px-3 py-3.5 text-center">Semana 4</th>
-                {totalWeeksInMonth === 5 && (
-                  <th className="px-3 py-3.5 text-center bg-purple-500/10 text-purple-700 dark:text-purple-300">
-                    Semana 5 (Corte Extendido)
-                  </th>
-                )}
+                {Array.from({ length: totalWeeksInMonth }, (_, i) => i + 1).map((w) => {
+                  const isCurrent = currentCalendarWeekIndex === w;
+                  const isPast = currentCalendarWeekIndex !== null && w < currentCalendarWeekIndex;
+                  const sunday = monthSundays[w - 1];
+
+                  return (
+                    <th
+                      key={w}
+                      className={`px-3 py-3 text-center transition-all ${
+                        isCurrent
+                          ? 'bg-sky-500/20 text-sky-700 dark:text-sky-300 border-x-2 border-sky-500/40'
+                          : w === 5
+                          ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="font-extrabold text-slate-900 dark:text-white">
+                          Semana {w}
+                        </span>
+                        {sunday && (
+                          <span className="text-[9px] opacity-75 font-mono">
+                            Dom {sunday.dayNumber}
+                          </span>
+                        )}
+                        {isCurrent ? (
+                          <span className="inline-flex items-center gap-1 text-[8px] px-1.5 py-0.5 rounded-full bg-sky-600 text-white font-black shadow-xs">
+                            📍 EN CURSO
+                          </span>
+                        ) : isPast ? (
+                          <span className="text-[8px] text-slate-400 font-medium">
+                            ✓ Concluida
+                          </span>
+                        ) : (
+                          <span className="text-[8px] text-slate-400/80 font-medium">
+                            ⚪ Próxima
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
                 <th className="px-4 py-3.5 text-right font-black text-slate-900 dark:text-white">
                   Total Mes Cobrado
                 </th>
@@ -457,10 +507,15 @@ export const WeeklyMonthAuditView: React.FC<WeeklyMonthAuditViewProps> = ({
                       {/* Columnas de Semanas 1 a 4 (o 5) */}
                       {row.weeksData.map((w) => {
                         const hasRecord = !!w.record;
-                        const isPaid = w.isPaid;
+                        const isCurrentWeek = currentCalendarWeekIndex === w.weekIndex;
 
                         return (
-                          <td key={w.weekIndex} className="px-3 py-3.5 text-center">
+                          <td
+                            key={w.weekIndex}
+                            className={`px-3 py-3.5 text-center transition-colors ${
+                              isCurrentWeek ? 'bg-sky-500/5 dark:bg-sky-500/10 border-x border-sky-500/20' : ''
+                            }`}
+                          >
                             {hasRecord ? (
                               <div className="flex flex-col items-center gap-1">
                                 <span

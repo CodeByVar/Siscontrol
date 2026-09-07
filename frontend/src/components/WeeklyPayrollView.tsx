@@ -175,7 +175,7 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
         <div className="space-y-6">
           {/* Controles de Periodo */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               <span className="text-xs font-bold text-slate-500">Semana Seleccionada:</span>
               {weeklyPeriods.length > 1 && (
                 <select
@@ -185,10 +185,40 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                 >
                   {weeklyPeriods.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} {p.status === 'OPEN' ? '(Abierto)' : '(Cerrado)'}
+                      {p.name} {p.status === 'OPEN' ? '🟢 (En Curso)' : '🔒 (Cerrada)'}
                     </option>
                   ))}
                 </select>
+              )}
+
+              {/* Indicador de Semana en Curso vs Cerrada */}
+              {activePeriod && (
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-3 py-1 rounded-xl text-xs font-black inline-flex items-center gap-1.5 border ${
+                      activePeriod.status === 'OPEN'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700'
+                    }`}
+                  >
+                    {activePeriod.status === 'OPEN' ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Semana en Curso (Activa)
+                      </>
+                    ) : (
+                      <>
+                        <span>🔒</span> Semana Pasada (Cerrada)
+                      </>
+                    )}
+                  </span>
+
+                  {activePeriod.status === 'OPEN' && (
+                    <span className={`text-[11px] ${deadlineInfo.color}`}>
+                      ({deadlineInfo.text})
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 

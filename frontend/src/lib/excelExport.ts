@@ -67,7 +67,7 @@ export const exportWeeklyMonthAuditToExcel = (
     fullName: string;
     position: string;
     baseWeekly: number;
-    weeksData: { weekIndex: number; netAmount: number; status: 'PAID' | 'PENDING' | 'UNRECORDED'; paymentDate?: string }[];
+    weeksData: { weekIndex: number; netAmount: number; status: string; paymentDate?: string }[];
     totalMonthGross: number;
     totalMonthPaid: number;
     totalMonthPending: number;

@@ -117,7 +117,7 @@ export const WeeklyMonthAuditView: React.FC<WeeklyMonthAuditViewProps> = ({
         const weekDateLabel = sunday ? `Dom ${sunday.dayNumber}` : `Sem ${w}`;
 
         // Intentar emparejar con un periodo semanal existente
-        let matchedPeriod = weeklyPeriods[w - 1];
+        let matchedPeriod: PayrollPeriod | undefined = weeklyPeriods[w - 1];
         let matchedRecord = matchedPeriod
           ? empRecords.find((r) => r.periodId === matchedPeriod.id)
           : undefined;
@@ -491,12 +491,12 @@ export const WeeklyMonthAuditView: React.FC<WeeklyMonthAuditViewProps> = ({
                                   onOpenPaymentQR &&
                                   w.record && (
                                     <button
-                                      onClick={() =>
-                                        onOpenPaymentQR(
-                                          w.record!,
-                                          w.period || periods[0]
-                                        )
-                                      }
+                                      onClick={() => {
+                                        const p = w.period || periods[0];
+                                        if (p && w.record) {
+                                          onOpenPaymentQR(w.record, p);
+                                        }
+                                      }}
                                       className="text-[9px] font-bold text-emerald-600 hover:text-emerald-500 underline cursor-pointer"
                                       title="Pagar esta semana pendiente"
                                     >

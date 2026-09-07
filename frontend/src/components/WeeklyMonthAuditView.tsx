@@ -118,17 +118,19 @@ export const WeeklyMonthAuditView: React.FC<WeeklyMonthAuditViewProps> = ({
 
         // Intentar emparejar con un periodo semanal existente
         let matchedPeriod: PayrollPeriod | undefined = weeklyPeriods[w - 1];
-        let matchedRecord = matchedPeriod
-          ? empRecords.find((r) => r.periodId === matchedPeriod.id)
+        const periodId = matchedPeriod?.id;
+        let matchedRecord = periodId
+          ? empRecords.find((r) => r.periodId === periodId)
           : undefined;
 
         // Si no se encuentra por índice, buscar por mes/año en código o nombre
         if (!matchedRecord && empRecords.length > 0) {
           if (w === 1 && empRecords[0]) {
             matchedRecord = empRecords[0];
-            matchedPeriod = weeklyPeriods.find(
-              (p) => p.id === matchedRecord?.periodId
-            );
+            const recPeriodId = matchedRecord?.periodId;
+            matchedPeriod = recPeriodId
+              ? weeklyPeriods.find((p) => p.id === recPeriodId)
+              : undefined;
           }
         }
 

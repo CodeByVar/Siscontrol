@@ -69,12 +69,23 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
             </div>
 
             <div className="text-right">
-              <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-300 border border-brand-500/20">
-                BOLETA OFICIAL
+              <span
+                className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${
+                  record.status === 'PAID'
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                    : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                }`}
+              >
+                {record.status === 'PAID' ? 'PAGADO OFICIAL' : 'PENDIENTE DE PAGO'}
               </span>
               <p className="text-xs font-mono text-slate-400 mt-1">
                 REF: {record.id.slice(0, 10).toUpperCase()}
               </p>
+              {record.paymentDate && (
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Abonado: {record.paymentDate}
+                </p>
+              )}
             </div>
           </div>
 
@@ -169,10 +180,22 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
             </div>
 
             <div className="text-right">
-              <span className="text-xs text-slate-500 dark:text-slate-400 block">Método de Cobro</span>
-              <span className="text-xs font-bold text-slate-900 dark:text-white">
-                {record.paymentMethod === 'QR_BANCARIO' ? 'QR Simple Bancario' : record.employee.bankName || 'Efectivo en Caja'}
+              <span className="text-xs text-slate-500 dark:text-slate-400 block">
+                {record.status === 'PAID' ? 'Método & Fecha de Pago' : 'Método de Pago Previsto'}
               </span>
+              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                {record.paymentMethod === 'QR_BANCARIO'
+                  ? 'QR Simple Bancario'
+                  : record.paymentMethod === 'TRANSFERENCIA'
+                  ? 'Transferencia Bancaria'
+                  : record.employee.bankName || 'Efectivo en Caja'}
+                {record.paymentReference ? ` (Ref: ${record.paymentReference})` : ''}
+              </span>
+              {record.paymentDate && (
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-bold">
+                  Abonado el: {record.paymentDate}
+                </span>
+              )}
             </div>
           </div>
 

@@ -24,18 +24,31 @@ export const ReportsView: React.FC = () => {
   const { payrollRecords, periods, employees, currencySymbol } = useApp();
   const [activeReportTab, setActiveReportTab] = useState<'MONTHLY' | 'INDIVIDUAL'>('MONTHLY');
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-08');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>(
     employees[0]?.id || ''
   );
 
-  // 1. Datos para Reporte Mensual Consolidado
-  const weeklyRecords = payrollRecords.filter((r) => r.employee.paymentFrequency === 'SEMANAL');
-  const monthlyRecords = payrollRecords.filter((r) => r.employee.paymentFrequency === 'MENSUAL');
+  // 1. Datos para Reporte Mensual Consolidado (Separación exacta entre Pagado Efectivo y Deuda Pendiente)
+  const paidRecords = payrollRecords.filter((r) => r.status === 'PAID');
+  const pendingRecords = payrollRecords.filter((r) => r.status !== 'PAID');
 
-  const totalWeeklyPaid = weeklyRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
-  const totalMonthlyPaid = monthlyRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
-  const totalAdvancesDeducted = payrollRecords.reduce((acc, r) => acc + Number(r.advancesDeduction), 0);
-  const grandTotalDisbursed = totalWeeklyPaid + totalMonthlyPaid;
+  const totalPaidDisbursed = paidRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
+  const totalPendingDebt = pendingRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
+
+  const weeklyPaidRecords = paidRecords.filter((r) => r.employee.paymentFrequency === 'SEMANAL');
+  const monthlyPaidRecords = paidRecords.filter((r) => r.employee.paymentFrequency === 'MENSUAL');
+
+  const totalWeeklyPaid = weeklyPaidRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
+  const totalMonthlyPaid = monthlyPaidRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
+  const totalAdvancesDeducted = paidRecords.reduce((acc, r) => acc + Number(r.advancesDeduction), 0);
+
+  // Registros a mostrar en la tabla según filtro de estado
+  const filteredRecords = payrollRecords.filter((r) => {
+    if (paymentStatusFilter === 'PAID') return r.status === 'PAID';
+    if (paymentStatusFilter === 'PENDING') return r.status !== 'PAID';
+    return true;
+  });
 
   // 2. Datos para Reporte Individual
   const selectedEmployee = employees.find((e) => e.id === selectedEmployeeId) || employees[0];
@@ -61,7 +74,7 @@ export const ReportsView: React.FC = () => {
               Centro de Reportes Financieros & Boletas
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Consolidación mensual de sueldos y auditoría individual de cobros por trabajador.
+              Consolidación de pagos realizados, control de deudas pendientes y auditoría por trabajador.
             </p>
           </div>
         </div>
@@ -98,78 +111,112 @@ export const ReportsView: React.FC = () => {
         <div className="space-y-6 animate-in fade-in duration-150">
           {/* KPI Cards de Desglose Salarial Mensual */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 1. Nóminas Semanales */}
+            {/* 1. Total Pagado Efectivo */}
+            <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-emerald-500 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm bg-gradient-to-tr from-emerald-500/5 to-transparent">
+              <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+                Total Efectivamente Pagado
+              </span>
+              <div className="text-2xl font-black text-emerald-600 dark:text-emerald-300 font-mono mt-1">
+                {currencySymbol} {totalPaidDisbursed.toLocaleString()}
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                {paidRecords.length} liquidaciones canceladas
+              </p>
+            </div>
+
+            {/* 2. Total Pendiente de Pago */}
+            <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-amber-500 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm bg-gradient-to-tr from-amber-500/5 to-transparent">
+              <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
+                Total Pendiente por Liquidar
+              </span>
+              <div className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono mt-1">
+                {currencySymbol} {totalPendingDebt.toLocaleString()}
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                {pendingRecords.length} pagos aún no registrados
+              </p>
+            </div>
+
+            {/* 3. Semanales Pagados */}
             <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-sky-500 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm">
               <span className="text-[10px] font-black text-sky-600 dark:text-sky-400 uppercase tracking-wider block">
-                Total Nóminas Semanales
+                Semanales Pagados
               </span>
               <div className="text-2xl font-black text-slate-900 dark:text-white font-mono mt-1">
                 {currencySymbol} {totalWeeklyPaid.toLocaleString()}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                Personal operativo de Logística & Carga
+                {weeklyPaidRecords.length} boletas semanales abonadas
               </p>
             </div>
 
-            {/* 2. Nóminas Mensuales */}
-            <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-emerald-500 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm">
-              <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
-                Total Nóminas Mensuales
+            {/* 4. Mensuales Pagados */}
+            <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-indigo-600 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-wider block">
+                Mensuales Pagados
               </span>
               <div className="text-2xl font-black text-slate-900 dark:text-white font-mono mt-1">
                 {currencySymbol} {totalMonthlyPaid.toLocaleString()}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                Personal de Ventas, Oficina y Compras
-              </p>
-            </div>
-
-            {/* 3. Adelantos Descontados */}
-            <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-amber-500 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm">
-              <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
-                Adelantos Deducidos
-              </span>
-              <div className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono mt-1">
-                -{currencySymbol} {totalAdvancesDeducted.toLocaleString()}
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                Anticipos descontados en el mes
-              </p>
-            </div>
-
-            {/* 4. Total Desembolsado Líquido */}
-            <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-indigo-600 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm bg-gradient-to-tr from-indigo-500/5 to-transparent">
-              <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-wider block">
-                Desembolso Total Neto
-              </span>
-              <div className="text-2xl font-black text-indigo-700 dark:text-indigo-300 font-mono mt-1">
-                {currencySymbol} {grandTotalDisbursed.toLocaleString()}
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                Total efectivamente pagado a trabajadores
+                {monthlyPaidRecords.length} liquidaciones mensuales abonadas
               </p>
             </div>
           </div>
 
           {/* Tabla de Planilla Mensual Consolidada */}
           <div className="glass-panel rounded-3xl border border-slate-200 dark:border-slate-800/80 overflow-hidden shadow-sm space-y-4 p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
               <div>
                 <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
-                  Consolidado de Salarios Pagados por Trabajador
+                  Consolidado de Nóminas y Estado de Pagos
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Desglose completo con modalidad de pago (Semanal vs Mensual) y método de cobro (QR / Efectivo).
+                  Visualiza los trabajadores que ya cobraron su salario con su fecha exacta y aquellos aún pendientes.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Filtros de Estado de Pago */}
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                  <button
+                    onClick={() => setPaymentStatusFilter('ALL')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      paymentStatusFilter === 'ALL'
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Todos ({payrollRecords.length})
+                  </button>
+                  <button
+                    onClick={() => setPaymentStatusFilter('PAID')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      paymentStatusFilter === 'PAID'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10'
+                    }`}
+                  >
+                    Solo Pagados ({paidRecords.length})
+                  </button>
+                  <button
+                    onClick={() => setPaymentStatusFilter('PENDING')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                      paymentStatusFilter === 'PENDING'
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
+                    }`}
+                  >
+                    Pendientes ({pendingRecords.length})
+                  </button>
+                </div>
+
                 <button
-                  onClick={() => exportPayrollToExcel(payrollRecords, periods[0])}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 shadow-sm"
+                  onClick={() => exportPayrollToExcel(filteredRecords, periods[0])}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Descargar Excel Consolidado
+                  Descargar Excel ({filteredRecords.length})
                 </button>
               </div>
             </div>
@@ -187,13 +234,15 @@ export const ReportsView: React.FC = () => {
                     <th className="px-4 py-3 text-right font-black text-slate-900 dark:text-white">
                       Líquido Percibido
                     </th>
-                    <th className="px-4 py-3 text-center">Método de Pago</th>
+                    <th className="px-4 py-3 text-center">Estado de Pago</th>
+                    <th className="px-4 py-3 text-center">Método & Ref.</th>
                     <th className="px-4 py-3 text-center">Boleta PDF</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
-                  {payrollRecords.map((rec) => {
+                  {filteredRecords.map((rec) => {
                     const isWeekly = rec.employee.paymentFrequency === 'SEMANAL';
+                    const isPaid = rec.status === 'PAID';
                     const period = periods.find((p) => p.id === rec.periodId) || periods[0];
 
                     return (
@@ -240,16 +289,54 @@ export const ReportsView: React.FC = () => {
                           {currencySymbol} {Number(rec.netAmount).toFixed(2)}
                         </td>
 
+                        {/* ESTADO DE PAGO */}
                         <td className="px-4 py-3 text-center">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                            {rec.paymentMethod === 'QR_BANCARIO' ? 'QR Bancario' : rec.paymentMethod === 'EFECTIVO' ? 'Efectivo en Caja' : 'Transferencia'}
-                          </span>
+                          {isPaid ? (
+                            <div className="flex flex-col items-center">
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                                PAGADO
+                              </span>
+                              <span className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                                📅 {rec.paymentDate || 'Registrado'}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                                PENDIENTE
+                              </span>
+                              <span className="text-[9px] text-amber-600 dark:text-amber-400 mt-0.5 font-semibold">
+                                Por Liquidar
+                              </span>
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-center">
+                          {isPaid ? (
+                            <div className="flex flex-col items-center text-[10px]">
+                              <span className="font-bold text-slate-800 dark:text-slate-200">
+                                {rec.paymentMethod === 'QR_BANCARIO'
+                                  ? 'QR Bancario'
+                                  : rec.paymentMethod === 'TRANSFERENCIA'
+                                  ? 'Transferencia'
+                                  : 'Efectivo en Caja'}
+                              </span>
+                              {rec.paymentReference && (
+                                <span className="text-[9px] text-slate-400 font-mono">
+                                  Ref: {rec.paymentReference}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">-</span>
+                          )}
                         </td>
 
                         <td className="px-4 py-3 text-center">
                           <button
                             onClick={() => generatePayslipPDF(rec, period)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors cursor-pointer"
                             title="Descargar Boleta Oficial en PDF"
                           >
                             <FileText className="w-4 h-4" />

@@ -95,7 +95,14 @@ interface AppContextType {
       paymentMethod?: PaymentMethod;
     }
   ) => void;
-  markRecordAsPaid: (recordId: string, method: PaymentMethod) => void;
+  markRecordAsPaid: (
+    recordId: string,
+    method: PaymentMethod,
+    paymentDate?: string,
+    paymentReference?: string,
+    paymentNotes?: string
+  ) => void;
+  markRecordAsUnpaid: (recordId: string) => void;
   resetSystemData: () => void;
 }
 
@@ -1069,7 +1076,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const markRecordAsPaid = (recordId: string, method: PaymentMethod) => {
+  const markRecordAsPaid = (
+    recordId: string,
+    method: PaymentMethod,
+    paymentDate?: string,
+    paymentReference?: string,
+    paymentNotes?: string
+  ) => {
+    const finalDate = paymentDate || new Date().toISOString().split('T')[0];
     setPayrollRecords((prev) => {
       const updated: PayrollRecord[] = prev.map((rec) =>
         rec.id === recordId
@@ -1077,7 +1091,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...rec,
               status: 'PAID' as const,
               paymentMethod: method,
-              paymentDate: new Date().toISOString().split('T')[0],
+              paymentDate: finalDate,
+              paymentReference: paymentReference?.trim() || undefined,
+              paymentNotes: paymentNotes?.trim() || undefined,
             }
           : rec
       );
@@ -1092,16 +1108,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const approveAndClosePeriod = (periodId: string) => {
+  const markRecordAsUnpaid = (recordId: string) => {
     setPayrollRecords((prev) => {
-      const updated: PayrollRecord[] = prev.map((r) =>
-        r.periodId === periodId
-          ? { ...r, status: 'PAID' as const, paymentDate: new Date().toISOString().split('T')[0] }
-          : r
+      const updated: PayrollRecord[] = prev.map((rec) =>
+        rec.id === recordId
+          ? {
+              ...rec,
+              status: 'DRAFT' as const,
+              paymentMethod: undefined,
+              paymentDate: undefined,
+              paymentReference: undefined,
+              paymentNotes: undefined,
+            }
+          : rec
       );
       localStorage.setItem('importrivero_records_v5', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const approveAndClosePeriod = (periodId: string) => {
+    // IMPORTANTE: Al cerrar la semana/periodo, NO forzar 'PAID' a todos.
+    // Solo aquellos trabajadores a quienes se les registró su pago individual tienen 'PAID'.
+    // Los no pagados permanecen como 'DRAFT' para que el sistema emita alertas de deuda pendiente.
 
     const records = payrollRecords.filter((r) => r.periodId === periodId);
     const totalGross = records.reduce((acc, r) => acc + Number(r.totalEarnings), 0);
@@ -1222,6 +1251,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         approveAndClosePeriod,
         updateRecord,
         markRecordAsPaid,
+        markRecordAsUnpaid,
         resetSystemData,
       }}
     >

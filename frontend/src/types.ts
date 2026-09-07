@@ -94,6 +94,8 @@ export interface PayrollRecord {
   status: 'DRAFT' | 'PAID';
   paymentMethod?: PaymentMethod;
   paymentDate?: string;
+  paymentReference?: string;
+  paymentNotes?: string;
   items: PayrollItem[];
 }
 

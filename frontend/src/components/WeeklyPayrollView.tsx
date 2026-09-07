@@ -11,6 +11,7 @@ import {
   Truck,
   Clock,
   MessageSquare,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PayrollRecord, PayrollPeriod } from '../types';
@@ -43,7 +44,15 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   onOpenAddPeriod,
   onOpenPaymentQR,
 }) => {
-  const { periods, payrollRecords, calculatePeriodPayroll, approveAndClosePeriod, currentRole, currencySymbol } = useApp();
+  const {
+    periods,
+    payrollRecords,
+    calculatePeriodPayroll,
+    approveAndClosePeriod,
+    markRecordAsUnpaid,
+    currentRole,
+    currencySymbol,
+  } = useApp();
 
   const weeklyPeriods = periods.filter((p) => p.frequency === 'SEMANAL');
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
@@ -72,7 +81,39 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   const paidRecordsCount = activeRecords.filter((r) => r.status === 'PAID').length;
   const pendingRecordsCount = activeRecords.filter((r) => r.status !== 'PAID').length;
 
+  // Detección de Deudas Pendientes de Semanas Anteriores (Control de Pagos Atrasados)
+  const pastUnpaidWeeklyRecords = payrollRecords.filter((rec) => {
+    if (rec.employee?.paymentFrequency !== 'SEMANAL' || rec.status === 'PAID') {
+      return false;
+    }
+    const recPeriod = periods.find((p) => p.id === rec.periodId);
+    if (!recPeriod) return false;
+    return rec.periodId !== (activePeriod?.id || '') || recPeriod.status === 'CLOSED';
+  });
+
+  const totalPastUnpaidDebt = pastUnpaidWeeklyRecords.reduce(
+    (acc, r) => acc + Number(r.netAmount),
+    0
+  );
+
   const deadlineInfo = getWeeklyDeadlineInfo();
+
+  const handleCloseWeek = () => {
+    if (pendingRecordsCount > 0) {
+      if (
+        !confirm(
+          `⚠️ Atención: Hay ${pendingRecordsCount} trabajador(es) con pago PENDIENTE en esta semana.\n\nAl cerrar la semana, pasarán a figurar con ALERTA DE DEUDA PENDIENTE para que no pierdas el control y puedas registrar su pago después.\n\n¿Confirmas cerrar la semana actual y abrir la siguiente?`
+        )
+      ) {
+        return;
+      }
+    } else {
+      if (!confirm('¿Deseas cerrar esta semana con todos los pagos al día y pasar a la siguiente?')) {
+        return;
+      }
+    }
+    approveAndClosePeriod(activePeriod.id);
+  };
 
   return (
     <div className="space-y-6">
@@ -88,7 +129,7 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                 Nómina Semanal (Choferes, Almacén y Operativos)
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Liquidación semanal automática cada 7 días con cálculo de horas extras y envío a WhatsApp.
+                Liquidación semanal individual con registro de pago, alerta de deudas atrasadas y boleta por WhatsApp.
               </p>
             </div>
           </div>
@@ -122,70 +163,68 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
         </div>
       </div>
 
-      {/* Regla y Notificación de Plazo de Pago Semanal */}
-      <div className="p-3.5 px-5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-          <span>
-            <strong>Plazo Límite de Pago Semanal:</strong> Liquidación máxima hasta el <strong>DOMINGO</strong>. &bull;{' '}
-            <strong className={deadlineInfo.color}>{deadlineInfo.text}</strong>
-          </span>
-        </div>
-        {pendingRecordsCount > 0 ? (
-          <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-500/25 text-amber-800 dark:text-amber-300 border border-amber-500/40 shrink-0">
-            {pendingRecordsCount} pendiente(s) de cobro
-          </span>
-        ) : (
-          <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
-            Completado
-          </span>
-        )}
-      </div>
-
-      {/* Banner de Estado Automático */}
-      {activePeriod && (
-        <div className="p-4 rounded-3xl bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent border border-sky-500/20 flex flex-col md:flex-row md:items-center md:justify-between gap-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center font-bold shrink-0">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-black text-slate-900 dark:text-white">
-                  {activePeriod.name}
-                </h2>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-700 dark:text-sky-300">
-                  {activePeriod.status === 'OPEN' ? 'SEMANA ACTIVA (EN CURSO)' : 'LIQUIDACIÓN CERRADA'}
-                </span>
+      {/* 🚨 ALERTA DE DEUDAS PENDIENTES / PAGOS ATRASADOS DE SEMANAS ANTERIORES */}
+      {pastUnpaidWeeklyRecords.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-3xl bg-red-500/10 border-2 border-red-500/30 text-red-950 dark:text-red-200 shadow-md space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-red-500/20 text-red-600 dark:text-red-400 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Tus trabajadores semanales ya están listos para liquidar horas extras, transferir por QR o enviar comprobantes por WhatsApp.
-              </p>
+              <div>
+                <h3 className="text-sm font-black text-red-700 dark:text-red-300 uppercase tracking-tight">
+                  Alerta de Control: {pastUnpaidWeeklyRecords.length} Pago(s) Semanal(es) Atrasado(s) de Semanas Anteriores
+                </h3>
+                <p className="text-xs text-red-700/80 dark:text-red-300/80">
+                  Ya inició una nueva semana y estos trabajadores aún no tienen su pago registrado. Liquídalos para mantener las cuentas al día.
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right shrink-0">
+              <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider block">
+                Total Deuda Acumulada:
+              </span>
+              <span className="text-xl font-black font-mono text-red-600 dark:text-red-400">
+                {currencySymbol} {totalPastUnpaidDebt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {isBossOrAdmin && activePeriod.status === 'OPEN' && (
-              <>
-                <button
-                  onClick={() => calculatePeriodPayroll(activePeriod.id)}
-                  className="px-4 py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer"
+          {/* Lista de deudas atrasadas con botón de pago directo */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+            {pastUnpaidWeeklyRecords.map((debtRec) => {
+              const debtPeriod = periods.find((p) => p.id === debtRec.periodId);
+              return (
+                <div
+                  key={debtRec.id}
+                  className="p-3 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-red-500/30 flex items-center justify-between gap-2 text-xs shadow-sm"
                 >
-                  Recalcular Todo
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm('¿Deseas cerrar esta semana y archivar los pagos?')) {
-                      approveAndClosePeriod(activePeriod.id);
-                    }
-                  }}
-                  className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white font-extrabold text-xs shadow-lg shadow-sky-500/20 transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Cerrar Semana & Pasar a la Siguiente
-                </button>
-              </>
-            )}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-extrabold text-slate-900 dark:text-white truncate">
+                      {debtRec.employee.lastName}, {debtRec.employee.firstName}
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                      {debtPeriod?.name || 'Semana Anterior'} &bull; DNI: {debtRec.employee.dni}
+                    </p>
+                    <span className="font-mono font-black text-red-600 dark:text-red-400">
+                      Adeuda: {currencySymbol} {Number(debtRec.netAmount).toFixed(2)}
+                    </span>
+                  </div>
+
+                  {onOpenPaymentQR && (
+                    <button
+                      onClick={() => onOpenPaymentQR(debtRec, debtPeriod || activePeriod)}
+                      className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-[11px] flex items-center gap-1 shadow-sm transition-all shrink-0 cursor-pointer"
+                      title="Registrar pago y liquidar deuda atrasada"
+                    >
+                      <DollarSign className="w-3.5 h-3.5" />
+                      Pagar Deuda
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -276,6 +315,12 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                   const isPaid = rec.status === 'PAID';
                   const isLunASab = rec.employee.workSchedule === 'LUNES_A_SABADO' || !rec.employee.workSchedule;
 
+                  // Verificar si este trabajador arrastra deuda de semanas anteriores
+                  const workerPastDebts = pastUnpaidWeeklyRecords.filter(
+                    (p) => (p.employee?.dni || p.employeeId) === (rec.employee?.dni || rec.employeeId)
+                  );
+                  const workerPastDebtTotal = workerPastDebts.reduce((sum, d) => sum + Number(d.netAmount), 0);
+
                   return (
                     <tr
                       key={rec.id}
@@ -285,9 +330,17 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                         <div className="font-extrabold text-slate-900 dark:text-white">
                           {rec.employee.lastName}, {rec.employee.firstName}
                         </div>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          DNI: {rec.employee.dni}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            DNI: {rec.employee.dni}
+                          </span>
+                          {workerPastDebts.length > 0 && (
+                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30 flex items-center gap-1 shadow-xs">
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                              Arrastra deuda: {currencySymbol} {workerPastDebtTotal.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-4 py-3.5 text-slate-600 dark:text-slate-300">
@@ -344,29 +397,62 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                             {isPaid ? 'PAGADO' : 'PENDIENTE'}
                           </span>
 
-                          <span className={`text-[10px] ${isPaid ? 'text-slate-400 dark:text-slate-500 font-medium' : deadlineInfo.color}`}>
-                            {isPaid
-                              ? (rec.paymentMethod === 'QR_BANCARIO' ? 'Vía QR' : 'Efectivo')
-                              : deadlineInfo.text}
-                          </span>
+                          {isPaid ? (
+                            <div className="flex flex-col items-center text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                📅 {rec.paymentDate || 'Registrado'}
+                              </span>
+                              <span className="text-[9px] text-slate-400 dark:text-slate-500">
+                                {rec.paymentMethod === 'QR_BANCARIO'
+                                  ? 'QR Bancario'
+                                  : rec.paymentMethod === 'TRANSFERENCIA'
+                                  ? 'Transferencia'
+                                  : 'Efectivo'}
+                                {rec.paymentReference ? ` (${rec.paymentReference})` : ''}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className={`text-[10px] ${deadlineInfo.color}`}>
+                              {deadlineInfo.text}
+                            </span>
+                          )}
                         </div>
                       </td>
 
                       <td className="px-4 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
-                          {/* Botón Pagar QR */}
+                          {/* Botón Registrar Pago Individual */}
                           {onOpenPaymentQR && !isPaid && (
                             <button
                               onClick={() => onOpenPaymentQR(rec, activePeriod)}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] flex items-center gap-1 shadow-sm transition-all cursor-pointer"
-                              title="Escanear QR y Pagar Salario"
+                              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-[11px] flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+                              title="Registrar pago realizado al trabajador"
                             >
-                              <QrCode className="w-3.5 h-3.5" />
-                              Pagar QR
+                              <DollarSign className="w-3.5 h-3.5" />
+                              Registrar Pago
                             </button>
                           )}
 
-                          {/* 📲 NUEVO BOTÓN: ENVIAR BOLETA POR WHATSAPP */}
+                          {/* Reversar pago si fue registrado por error */}
+                          {isPaid && isBossOrAdmin && (
+                            <button
+                              onClick={() => {
+                                if (
+                                  confirm(
+                                    `¿Deseas anular la confirmación de pago de ${rec.employee.firstName} ${rec.employee.lastName}? El registro volverá a estado PENDIENTE.`
+                                  )
+                                ) {
+                                  markRecordAsUnpaid(rec.id);
+                                }
+                              }}
+                              className="p-1.5 px-2 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-600 dark:bg-slate-800 dark:hover:bg-red-950/40 text-[10px] font-bold transition-all"
+                              title="Reversar / Desmarcar pagado si hubo error"
+                            >
+                              Reversar
+                            </button>
+                          )}
+
+                          {/* 📲 Enviar boleta por WhatsApp */}
                           <button
                             onClick={() => sendPayslipViaWhatsApp(rec, activePeriod, currencySymbol)}
                             className="p-1.5 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500 text-emerald-700 dark:text-emerald-300 hover:text-white border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1 transition-all shadow-sm cursor-pointer"
@@ -380,7 +466,7 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                           <button
                             onClick={() => onSelectRecordForDrawer(rec, activePeriod)}
                             className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                            title="Ajustar días u horas extras"
+                            title="Ajustar días u horas extras y ver desglose"
                           >
                             <SlidersHorizontal className="w-3.5 h-3.5" />
                           </button>

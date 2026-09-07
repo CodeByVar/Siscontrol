@@ -20,6 +20,9 @@ export const exportPayrollToExcel = (records: PayrollRecord[], period: PayrollPe
     'TOTAL DESCUENTOS': Number(r.totalDeductions),
     'LÍQUIDO PAGABLE (NETO)': Number(r.netAmount),
     'ESTADO': r.status === 'PAID' ? 'PAGADO' : 'PENDIENTE',
+    'FECHA DE PAGO': r.status === 'PAID' ? (r.paymentDate || 'Confirmado') : 'PENDIENTE',
+    'MÉTODO DE PAGO': r.status === 'PAID' ? (r.paymentMethod || 'EFECTIVO') : '-',
+    'REFERENCIA / COMPROBANTE': r.paymentReference || '-',
     'BANCO': r.employee.bankName || 'EFECTIVO',
     'NRO CUENTA': r.employee.bankAccountNumber || '-',
   }));

@@ -189,7 +189,7 @@ export const getPayrollRecordsByPeriod = async (req: Request, res: Response) => 
 
 export const updatePayrollRecord = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { workedDays, overtimeHours, bonuses, otherDeductions, status } = req.body;
+  const { workedDays, overtimeHours, bonuses, otherDeductions, status, paymentDate, paymentReference } = req.body;
 
   try {
     const current = await prisma.payrollRecord.findUnique({
@@ -236,12 +236,34 @@ export const updatePayrollRecord = async (req: Request, res: Response) => {
         totalDeductions: calculation.totalDeductions,
         netAmount: calculation.netAmount,
         status: status || current.status,
+        ...(status === 'PAID'
+          ? {
+              paidAt: paymentDate ? new Date(paymentDate) : new Date(),
+              paymentReference: paymentReference || current.paymentReference,
+            }
+          : status === 'DRAFT'
+          ? { paidAt: null, paymentReference: null }
+          : {}),
       },
       include: {
         employee: true,
         items: true,
       },
     });
+
+    // Si se marcó como pagado individualmente y tiene adelanto, actualizar estado del adelanto a DEDUCTED
+    if (status === 'PAID' && Number(calculation.advancesDeduction) > 0) {
+      await prisma.advance.updateMany({
+        where: {
+          employeeId: current.employeeId,
+          status: 'PENDING',
+        },
+        data: {
+          status: 'DEDUCTED',
+          payrollRecordId: id,
+        },
+      });
+    }
 
     // Actualizar items si se pasaron nuevos
     if (bonuses || otherDeductions || overtimeHours !== undefined || workedDays !== undefined) {
@@ -269,22 +291,13 @@ export const payPayrollPeriod = async (req: Request, res: Response) => {
   const { periodId } = req.params;
 
   try {
-    // 1. Marcar todos los registros como PAID
-    await prisma.payrollRecord.updateMany({
-      where: { periodId },
-      data: {
-        status: 'PAID',
-        paidAt: new Date(),
-      },
-    });
-
-    // 2. Marcar los adelantos de los empleados involucrados como DEDUCTED
-    const records = await prisma.payrollRecord.findMany({
-      where: { periodId },
+    // 1. Marcar los adelantos de los empleados que ya tienen status PAID
+    const paidRecords = await prisma.payrollRecord.findMany({
+      where: { periodId, status: 'PAID' },
       include: { employee: true },
     });
 
-    for (const rec of records) {
+    for (const rec of paidRecords) {
       if (Number(rec.advancesDeduction) > 0) {
         await prisma.advance.updateMany({
           where: {
@@ -299,15 +312,15 @@ export const payPayrollPeriod = async (req: Request, res: Response) => {
       }
     }
 
-    // 3. Cerrar periodo
+    // 2. Cerrar periodo respetando el estado individual de pago de cada trabajador
     const updatedPeriod = await prisma.payrollPeriod.update({
       where: { id: periodId },
       data: { status: 'CLOSED' },
     });
 
-    return res.json({ message: 'Periodo de nómina cerrado y pagado exitosamente', period: updatedPeriod });
+    return res.json({ message: 'Periodo de nómina cerrado exitosamente', period: updatedPeriod });
   } catch (error) {
     console.error('Error al cerrar nómina:', error);
-    return res.status(500).json({ error: 'Error al procesar el pago de la nómina' });
+    return res.status(500).json({ error: 'Error al procesar el cierre de la nómina' });
   }
 };

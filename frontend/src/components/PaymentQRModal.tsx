@@ -27,6 +27,11 @@ export const PaymentQRModal: React.FC<PaymentQRModalProps> = ({
 }) => {
   const { markRecordAsPaid, employees, currencySymbol } = useApp();
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('QR_BANCARIO');
+  const [paymentDate, setPaymentDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [paymentReference, setPaymentReference] = useState<string>('');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
   if (!isOpen || !record || !period) return null;
@@ -43,7 +48,13 @@ export const PaymentQRModal: React.FC<PaymentQRModalProps> = ({
   const handleConfirmPayment = () => {
     setIsProcessing(true);
     setTimeout(() => {
-      markRecordAsPaid(record.id, selectedMethod);
+      markRecordAsPaid(
+        record.id,
+        selectedMethod,
+        paymentDate,
+        paymentReference,
+        paymentNotes
+      );
       setIsProcessing(false);
       onClose();
     }, 400);
@@ -174,17 +185,73 @@ export const PaymentQRModal: React.FC<PaymentQRModalProps> = ({
           </div>
         )}
 
-        {/* Cash payment notes */}
-        {selectedMethod === 'EFECTIVO' && (
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1 text-xs">
-            <p className="font-bold text-slate-800 dark:text-slate-200">
-              Pago en Efectivo / Caja Chica
-            </p>
-            <p className="text-slate-500 dark:text-slate-400 text-[11px]">
-              Al confirmar, el sistema registrará el egreso de efectivo y emitirá la boleta con firma física de conformidad.
-            </p>
+        {/* Desglose Rápido de la Liquidación */}
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
+          <div className="flex items-center justify-between font-bold text-slate-500 dark:text-slate-400 text-[11px]">
+            <span>Concepto</span>
+            <span>Importe</span>
           </div>
-        )}
+          <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+            <span>Sueldo Base ({record.workedDays} días)</span>
+            <span className="font-mono">{currencySymbol} {Number(record.baseSalary).toFixed(2)}</span>
+          </div>
+          {Number(record.overtimeAmount) > 0 && (
+            <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
+              <span>Horas Extras ({record.overtimeHours}h al 150%)</span>
+              <span className="font-mono">+{currencySymbol} {Number(record.overtimeAmount).toFixed(2)}</span>
+            </div>
+          )}
+          {Number(record.bonusesAmount) > 0 && (
+            <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+              <span>Bonos / Incentivos</span>
+              <span className="font-mono">+{currencySymbol} {Number(record.bonusesAmount).toFixed(2)}</span>
+            </div>
+          )}
+          {Number(record.advancesDeduction) > 0 && (
+            <div className="flex items-center justify-between text-red-600 dark:text-red-400">
+              <span>Descuento Adelantos</span>
+              <span className="font-mono">-{currencySymbol} {Number(record.advancesDeduction).toFixed(2)}</span>
+            </div>
+          )}
+          {Number(record.otherDeductions) > 0 && (
+            <div className="flex items-center justify-between text-red-600 dark:text-red-400">
+              <span>Otras Deducciones</span>
+              <span className="font-mono">-{currencySymbol} {Number(record.otherDeductions).toFixed(2)}</span>
+            </div>
+          )}
+          <div className="pt-1 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between font-extrabold text-slate-900 dark:text-white">
+            <span>Líquido a Pagar</span>
+            <span className="font-mono text-emerald-600 dark:text-emerald-400">{currencySymbol} {Number(record.netAmount).toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* Datos de Registro de Pago (Fecha, Referencia y Notas) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="space-y-1">
+            <label className="font-extrabold text-slate-700 dark:text-slate-300 block">
+              Fecha de Pago:
+            </label>
+            <input
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="font-extrabold text-slate-700 dark:text-slate-300 block">
+              Nº Referencia / Recibo (Opcional):
+            </label>
+            <input
+              type="text"
+              placeholder="Ej: TRF-83901 o Recibo #24"
+              value={paymentReference}
+              onChange={(e) => setPaymentReference(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            />
+          </div>
+        </div>
 
         {/* Footer Actions */}
         <div className="pt-2 flex items-center justify-between gap-3">

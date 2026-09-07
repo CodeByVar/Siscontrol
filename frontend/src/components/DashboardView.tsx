@@ -11,6 +11,7 @@ import {
   DollarSign,
   Wallet,
   Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp, deduplicateEmployees } from '../context/AppContext';
 import { SalaryCharts } from './SalaryCharts';
@@ -45,6 +46,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const openWeeklyPeriod = periods.find((p) => p.frequency === 'SEMANAL' && p.status === 'OPEN');
   const openMonthlyPeriod = periods.find((p) => p.frequency === 'MENSUAL' && p.status === 'OPEN');
+
+  // Deudas pendientes de semanas anteriores
+  const pastUnpaidWeeklyRecords = payrollRecords.filter((rec) => {
+    if (rec.employee?.paymentFrequency !== 'SEMANAL' || rec.status === 'PAID') {
+      return false;
+    }
+    const recPeriod = periods.find((p) => p.id === rec.periodId);
+    if (!recPeriod) return false;
+    return rec.periodId !== openWeeklyPeriod?.id || recPeriod.status === 'CLOSED';
+  });
+  const totalPastUnpaidDebt = pastUnpaidWeeklyRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
 
   return (
     <div className="space-y-6">
@@ -85,6 +97,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* 🚨 Alerta de Deudas Pendientes de Semanas Anteriores */}
+      {pastUnpaidWeeklyRecords.length > 0 && (
+        <div
+          onClick={() => setActiveTab('weekly')}
+          className="p-4 sm:p-5 rounded-3xl bg-red-500/10 border-2 border-red-500/30 text-red-950 dark:text-red-200 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-red-500/15 transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-red-500/20 text-red-600 dark:text-red-400 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-black text-red-700 dark:text-red-300 uppercase tracking-tight">
+                ⚠️ Alerta de Control: {pastUnpaidWeeklyRecords.length} Pago(s) Semanal(es) Atrasado(s) de Semanas Previas
+              </h4>
+              <p className="text-xs text-red-600/90 dark:text-red-300/80">
+                Hay salarios semanales pendientes de liquidar por un total de <strong>{currencySymbol} {totalPastUnpaidDebt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>. Haz clic aquí para liquidarlos.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <span className="text-xs font-extrabold px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white flex items-center gap-1.5 shadow-sm transition-all">
+              Liquidar Deudas <ArrowUpRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* 4 Top KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

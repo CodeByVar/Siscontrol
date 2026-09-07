@@ -507,6 +507,7 @@ export const WeeklyMonthAuditView: React.FC<WeeklyMonthAuditViewProps> = ({
                       {/* Columnas de Semanas 1 a 4 (o 5) */}
                       {row.weeksData.map((w) => {
                         const hasRecord = !!w.record;
+                        const isPaid = w.isPaid;
                         const isCurrentWeek = currentCalendarWeekIndex === w.weekIndex;
 
                         return (

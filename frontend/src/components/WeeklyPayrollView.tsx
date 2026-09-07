@@ -16,6 +16,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { PayrollRecord, PayrollPeriod } from '../types';
 import { sendPayslipViaWhatsApp } from '../lib/whatsappGenerator';
+import { WeeklyMonthAuditView } from './WeeklyMonthAuditView';
 
 interface WeeklyPayrollViewProps {
   onSelectRecordForDrawer: (record: PayrollRecord, period: PayrollPeriod) => void;
@@ -54,6 +55,7 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
     currencySymbol,
   } = useApp();
 
+  const [subTab, setSubTab] = useState<'CURRENT_WEEK' | 'MONTH_AUDIT'>('CURRENT_WEEK');
   const weeklyPeriods = periods.filter((p) => p.frequency === 'SEMANAL');
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
 
@@ -118,7 +120,7 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="p-2.5 rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
@@ -129,39 +131,78 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                 Nómina Semanal (Choferes, Almacén y Operativos)
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Liquidación semanal individual con registro de pago, alerta de deudas atrasadas y boleta por WhatsApp.
+                Liquidación individual, alerta de deudas atrasadas y cómputo de semanas por mes (4 vs 5 semanas).
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {weeklyPeriods.length > 1 && (
-            <select
-              value={selectedPeriodId}
-              onChange={(e) => setSelectedPeriodId(e.target.value)}
-              className="px-3.5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-800 dark:text-white shadow-sm focus:outline-none"
-            >
-              {weeklyPeriods.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p.status === 'OPEN' ? '(Abierto)' : '(Cerrado)'}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {isBossOrAdmin && (
-            <button
-              onClick={() => onOpenAddPeriod('SEMANAL')}
-              className="px-4 py-2.5 rounded-2xl text-xs font-extrabold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 shadow-sm"
-              title="Crear otra semana de pago"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Otra Semana
-            </button>
-          )}
+        {/* Selector de Sub-Pestañas: Semana Activa vs Cómputo Mensual */}
+        <div className="flex items-center p-1 bg-slate-200/80 dark:bg-slate-800/80 rounded-2xl border border-slate-300 dark:border-slate-700 self-start md:self-auto">
+          <button
+            onClick={() => setSubTab('CURRENT_WEEK')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              subTab === 'CURRENT_WEEK'
+                ? 'bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Semana en Curso
+          </button>
+          <button
+            onClick={() => setSubTab('MONTH_AUDIT')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              subTab === 'MONTH_AUDIT'
+                ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Cómputo Mensual (4 vs 5 Semanas)
+          </button>
         </div>
       </div>
+
+      {/* Renderizar Cómputo Mensual si está activa la sub-pestaña */}
+      {subTab === 'MONTH_AUDIT' && (
+        <WeeklyMonthAuditView
+          onOpenPaymentQR={onOpenPaymentQR}
+          onOpenPayslip={onOpenPayslip}
+        />
+      )}
+
+      {/* Vista de Semana en Curso */}
+      {subTab === 'CURRENT_WEEK' && (
+        <div className="space-y-6">
+          {/* Controles de Periodo */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500">Semana Seleccionada:</span>
+              {weeklyPeriods.length > 1 && (
+                <select
+                  value={selectedPeriodId}
+                  onChange={(e) => setSelectedPeriodId(e.target.value)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-800 dark:text-white focus:outline-none"
+                >
+                  {weeklyPeriods.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.status === 'OPEN' ? '(Abierto)' : '(Cerrado)'}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {isBossOrAdmin && (
+              <button
+                onClick={() => onOpenAddPeriod('SEMANAL')}
+                className="px-4 py-2 rounded-xl text-xs font-extrabold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 shadow-xs"
+                title="Crear otra semana de pago"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Otra Semana
+              </button>
+            )}
+          </div>
 
       {/* 🚨 ALERTA DE DEUDAS PENDIENTES / PAGOS ATRASADOS DE SEMANAS ANTERIORES */}
       {pastUnpaidWeeklyRecords.length > 0 && (
@@ -489,6 +530,8 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
           </div>
         )}
       </div>
+        </div>
+      )}
     </div>
   );
 };

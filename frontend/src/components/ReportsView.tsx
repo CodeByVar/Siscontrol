@@ -19,10 +19,11 @@ import { useApp } from '../context/AppContext';
 import { PayrollRecord, Employee } from '../types';
 import { generatePayslipPDF } from '../lib/pdfGenerator';
 import { exportPayrollToExcel } from '../lib/excelExport';
+import { WeeklyMonthAuditView } from './WeeklyMonthAuditView';
 
 export const ReportsView: React.FC = () => {
   const { payrollRecords, periods, employees, currencySymbol } = useApp();
-  const [activeReportTab, setActiveReportTab] = useState<'MONTHLY' | 'INDIVIDUAL'>('MONTHLY');
+  const [activeReportTab, setActiveReportTab] = useState<'MONTHLY' | 'WEEKLY_AUDIT' | 'INDIVIDUAL'>('MONTHLY');
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-08');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>(
@@ -90,6 +91,16 @@ export const ReportsView: React.FC = () => {
             }`}
           >
             Reporte Mensual Consolidado
+          </button>
+          <button
+            onClick={() => setActiveReportTab('WEEKLY_AUDIT')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeReportTab === 'WEEKLY_AUDIT'
+                ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Control Semanas del Mes (4 vs 5)
           </button>
           <button
             onClick={() => setActiveReportTab('INDIVIDUAL')}
@@ -353,7 +364,16 @@ export const ReportsView: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* PESTAÑA 2: HISTORIAL Y REPORTE INDIVIDUAL POR TRABAJADOR */}
+      {/* PESTAÑA 2: CONTROL Y CÓMPUTO DE SEMANAS POR MES (4 VS 5 SEMANAS) */}
+      {/* ========================================================================= */}
+      {activeReportTab === 'WEEKLY_AUDIT' && (
+        <WeeklyMonthAuditView
+          onOpenPayslip={(rec, period) => generatePayslipPDF(rec, period)}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* PESTAÑA 3: HISTORIAL Y REPORTE INDIVIDUAL POR TRABAJADOR */}
       {/* ========================================================================= */}
       {activeReportTab === 'INDIVIDUAL' && selectedEmployee && (
         <div className="space-y-6 animate-in fade-in duration-150">

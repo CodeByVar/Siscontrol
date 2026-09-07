@@ -58,3 +58,54 @@ export const exportPayrollToExcel = (records: PayrollRecord[], period: PayrollPe
   const fileName = `Nomina_${period.code}_ImportRivero.xlsx`;
   XLSX.writeFile(workbook, fileName);
 };
+
+export const exportWeeklyMonthAuditToExcel = (
+  monthLabel: string,
+  totalWeeksInMonth: number,
+  rows: {
+    dni: string;
+    fullName: string;
+    position: string;
+    baseWeekly: number;
+    weeksData: { weekIndex: number; netAmount: number; status: 'PAID' | 'PENDING' | 'UNRECORDED'; paymentDate?: string }[];
+    totalMonthGross: number;
+    totalMonthPaid: number;
+    totalMonthPending: number;
+    paidWeeksCount: number;
+  }[]
+) => {
+  const data = rows.map((row, index) => {
+    const item: Record<string, any> = {
+      'Nº': index + 1,
+      'C.I. / DNI': row.dni,
+      'TRABAJADOR': row.fullName,
+      'CARGO': row.position,
+      'SUELDO SEMANAL': row.baseWeekly,
+    };
+
+    for (let w = 1; w <= totalWeeksInMonth; w++) {
+      const wData = row.weeksData.find((wd) => wd.weekIndex === w);
+      item[`SEM ${w} (MONTO)`] = wData ? wData.netAmount : 0;
+      item[`SEM ${w} (ESTADO)`] = wData
+        ? wData.status === 'PAID'
+          ? `PAGADO (${wData.paymentDate || 'OK'})`
+          : 'PENDIENTE'
+        : 'POR LIQUIDAR';
+    }
+
+    item['TOTAL MES PROYECTADO'] = row.totalMonthGross;
+    item['TOTAL COBRADO'] = row.totalMonthPaid;
+    item['SALDO PENDIENTE'] = row.totalMonthPending;
+    item['SEMANAS PAGADAS'] = `${row.paidWeeksCount} de ${totalWeeksInMonth}`;
+
+    return item;
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Matriz Semanas');
+
+  const fileName = `Control_Semanas_${monthLabel.replace(/\s+/g, '_')}_ImportRivero.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+};
+

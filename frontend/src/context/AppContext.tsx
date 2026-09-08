@@ -119,14 +119,14 @@ export const SYSTEM_USERS: Record<string, AppUser> = {
   },
 };
 
-// Periodos automáticos predeterminados para Septiembre 2026
+// Periodos automáticos predeterminados (Semana 1 inició el lunes 31 de Agosto)
 const DEFAULT_AUTO_PERIODS: PayrollPeriod[] = [
   {
     id: 'per-sem-1-sept-2026',
     code: 'SEM-1-SEPT-2026',
-    name: 'Semana 1 (01 Sep - 06 Sep)',
+    name: 'Semana 1 (31 Ago - 06 Sep)',
     frequency: 'SEMANAL',
-    startDate: '2026-09-01',
+    startDate: '2026-08-31',
     endDate: '2026-09-06',
     year: 2026,
     periodNumber: 1,
@@ -136,7 +136,7 @@ const DEFAULT_AUTO_PERIODS: PayrollPeriod[] = [
     totalAdvances: 0,
   },
   {
-    id: 'per-sem-actual',
+    id: 'per-sem-2-sept-2026',
     code: 'SEM-2-SEPT-2026',
     name: 'Semana 2 (07 Sep - 13 Sep)',
     frequency: 'SEMANAL',
@@ -180,10 +180,10 @@ const DEFAULT_AUTO_PERIODS: PayrollPeriod[] = [
   {
     id: 'per-sem-5-sept-2026',
     code: 'SEM-5-SEPT-2026',
-    name: 'Semana 5 (28 Sep - 30 Sep)',
+    name: 'Semana 5 (28 Sep - 04 Oct)',
     frequency: 'SEMANAL',
     startDate: '2026-09-28',
-    endDate: '2026-09-30',
+    endDate: '2026-10-04',
     year: 2026,
     periodNumber: 5,
     status: 'OPEN',
@@ -450,17 +450,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [periods, setPeriods] = useState<PayrollPeriod[]>(() => {
     try {
       const saved = localStorage.getItem('importrivero_periods_v5');
+      let currentList: PayrollPeriod[] = [];
       if (saved && JSON.parse(saved).length > 0) {
-        const parsed: PayrollPeriod[] = JSON.parse(saved);
-        const merged = [...parsed];
-        DEFAULT_AUTO_PERIODS.forEach((defP) => {
-          if (!merged.some((p) => p.id === defP.id || p.code === defP.code)) {
-            merged.push(defP);
-          }
-        });
-        return merged;
+        currentList = JSON.parse(saved);
+      } else {
+        currentList = [...DEFAULT_AUTO_PERIODS];
       }
-      return DEFAULT_AUTO_PERIODS;
+
+      // Eliminar periodos obsoletos o con desfases anteriores (como Semana 36)
+      currentList = currentList.filter(
+        (p) =>
+          p.id !== 'per-sem-actual' &&
+          p.code !== 'SEM-ACTUAL' &&
+          p.periodNumber !== 36 &&
+          !(p.startDate === '2026-09-01' && p.endDate === '2026-09-07') &&
+          !(p.startDate === '2026-09-01' && p.endDate === '2026-09-06')
+      );
+
+      // Asegurar que las 5 semanas oficiales existan con sus fechas exactas
+      DEFAULT_AUTO_PERIODS.forEach((defP) => {
+        const idx = currentList.findIndex((p) => p.id === defP.id || p.code === defP.code);
+        if (idx === -1) {
+          currentList.push(defP);
+        } else {
+          currentList[idx] = {
+            ...currentList[idx],
+            startDate: defP.startDate,
+            endDate: defP.endDate,
+            name: defP.name,
+            periodNumber: defP.periodNumber,
+            status: defP.status,
+          };
+        }
+      });
+
+      // Ordenar cronológicamente
+      currentList.sort((a, b) => a.startDate.localeCompare(b.startDate));
+      localStorage.setItem('importrivero_periods_v5', JSON.stringify(currentList));
+      return currentList;
     } catch (e) {
       return DEFAULT_AUTO_PERIODS;
     }
@@ -470,7 +497,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(() => {
     try {
       const saved = localStorage.getItem('importrivero_records_v5');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        const parsed: PayrollRecord[] = JSON.parse(saved);
+        // Asegurar que Semana 1 esté marcada como PAGADA ("la semana 1 se les pago ya")
+        return parsed.map((r) => {
+          if (r.periodId === 'per-sem-1-sept-2026') {
+            return {
+              ...r,
+              status: 'PAID',
+              paymentDate: r.paymentDate || '2026-09-06',
+              paymentMethod: r.paymentMethod || 'EFECTIVO',
+            };
+          }
+          return r;
+        });
+      }
+      return [];
     } catch (e) {
       return [];
     }
@@ -757,6 +799,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : [];
           const advancesSum = pendingAdvances.reduce((acc, a) => acc + Number(a.amount), 0);
 
+          const isSemana1 = targetPeriod.id === 'per-sem-1-sept-2026';
+
           if (!existingRecord) {
             const totalEarnings = emp.baseSalary;
             const totalDeductions = advancesSum;
@@ -777,8 +821,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               totalEarnings,
               totalDeductions,
               netAmount,
-              status: 'DRAFT',
-              paymentMethod: 'QR_BANCARIO',
+              status: isSemana1 ? 'PAID' : 'DRAFT',
+              paymentDate: isSemana1 ? '2026-09-06' : undefined,
+              paymentMethod: isSemana1 ? 'EFECTIVO' : 'QR_BANCARIO',
               items: [
                 {
                   id: '1',
@@ -800,23 +845,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
           } else {
             updatedRecords = updatedRecords.map((rec) => {
-              if (rec.id === existingRecord.id && rec.status === 'DRAFT') {
-                const dailyRate = emp.baseSalary / standardDays;
-                const earnedBase = Number((dailyRate * rec.workedDays).toFixed(2));
-                const totalEarnings = earnedBase + Number(rec.overtimeAmount) + Number(rec.bonusesAmount);
-                const totalDeductions = advancesSum + Number(rec.otherDeductions);
-                const netAmount = Math.max(0, totalEarnings - totalDeductions);
+              if (rec.id === existingRecord.id) {
+                // Si es Semana 1, asegurar que figure como pagada
+                if (isSemana1 && rec.status !== 'PAID') {
+                  return {
+                    ...rec,
+                    status: 'PAID',
+                    paymentDate: rec.paymentDate || '2026-09-06',
+                    paymentMethod: rec.paymentMethod || 'EFECTIVO',
+                  };
+                }
 
-                return {
-                  ...rec,
-                  employeeId: emp.id,
-                  employee: emp,
-                  baseSalary: emp.baseSalary,
-                  advancesDeduction: advancesSum,
-                  totalEarnings,
-                  totalDeductions,
-                  netAmount,
-                };
+                if (rec.status === 'DRAFT') {
+                  const dailyRate = emp.baseSalary / standardDays;
+                  const earnedBase = Number((dailyRate * rec.workedDays).toFixed(2));
+                  const totalEarnings = earnedBase + Number(rec.overtimeAmount) + Number(rec.bonusesAmount);
+                  const totalDeductions = advancesSum + Number(rec.otherDeductions);
+                  const netAmount = Math.max(0, totalEarnings - totalDeductions);
+
+                  return {
+                    ...rec,
+                    employeeId: emp.id,
+                    employee: emp,
+                    baseSalary: emp.baseSalary,
+                    advancesDeduction: advancesSum,
+                    totalEarnings,
+                    totalDeductions,
+                    netAmount,
+                  };
+                }
               }
               return rec;
             });

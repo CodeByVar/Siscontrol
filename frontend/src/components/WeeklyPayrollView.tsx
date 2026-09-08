@@ -57,19 +57,23 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   } = useApp();
 
   const [subTab, setSubTab] = useState<'CURRENT_WEEK' | 'MONTH_AUDIT'>('CURRENT_WEEK');
-  const weeklyPeriods = [...periods.filter((p) => p.frequency === 'SEMANAL')].sort((a, b) =>
-    a.startDate.localeCompare(b.startDate)
-  );
+  const weeklyPeriods = [...periods.filter((p) => p.frequency === 'SEMANAL')]
+    .filter((p) => p.id !== 'per-sem-actual' && p.code !== 'SEM-ACTUAL' && p.periodNumber !== 36)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
 
   useEffect(() => {
-    if (weeklyPeriods.length > 0 && !selectedPeriodId) {
+    if (weeklyPeriods.length > 0) {
       const todayStr = new Date().toISOString().split('T')[0];
-      const currentWeekPeriod = weeklyPeriods.find(
-        (p) => todayStr >= p.startDate && todayStr <= p.endDate
-      );
-      const openPeriod = weeklyPeriods.find((p) => p.status === 'OPEN');
-      setSelectedPeriodId(currentWeekPeriod ? currentWeekPeriod.id : openPeriod ? openPeriod.id : weeklyPeriods[0].id);
+      const isValid = weeklyPeriods.some((p) => p.id === selectedPeriodId);
+      if (!selectedPeriodId || !isValid) {
+        const currentWeekPeriod = weeklyPeriods.find(
+          (p) => todayStr >= p.startDate && todayStr <= p.endDate
+        );
+        const openPeriod = weeklyPeriods.find((p) => p.status === 'OPEN');
+        setSelectedPeriodId(currentWeekPeriod ? currentWeekPeriod.id : openPeriod ? openPeriod.id : weeklyPeriods[0].id);
+      }
     }
   }, [weeklyPeriods, selectedPeriodId]);
 
@@ -91,13 +95,15 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   const pendingRecordsCount = activeRecords.filter((r) => r.status !== 'PAID').length;
 
   // Detección de Deudas Pendientes de Semanas Anteriores (Control de Pagos Atrasados)
+  // ÚNICAMENTE periodos que ya cerraron en el pasado (endDate < hoy)
+  const todayStr = new Date().toISOString().split('T')[0];
   const pastUnpaidWeeklyRecords = payrollRecords.filter((rec) => {
     if (rec.employee?.paymentFrequency !== 'SEMANAL' || rec.status === 'PAID') {
       return false;
     }
     const recPeriod = periods.find((p) => p.id === rec.periodId);
     if (!recPeriod) return false;
-    return rec.periodId !== (activePeriod?.id || '') || recPeriod.status === 'CLOSED';
+    return recPeriod.status === 'CLOSED' && recPeriod.endDate < todayStr;
   });
 
   const totalPastUnpaidDebt = pastUnpaidWeeklyRecords.reduce(
@@ -232,9 +238,8 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-1">
               {weeklyPeriods.map((p, idx) => {
                 const isSelected = p.id === activePeriod?.id;
-                const isOpen = p.status === 'OPEN';
                 const todayStr = new Date().toISOString().split('T')[0];
-                const isCurrent = isOpen && todayStr >= p.startDate && todayStr <= p.endDate;
+                const isCurrent = p.id === 'per-sem-2-sept-2026' || (p.status === 'OPEN' && todayStr >= p.startDate && todayStr <= p.endDate);
 
                 const pRecords = payrollRecords.filter((r) => r.periodId === p.id);
                 const weekNetSum = pRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
@@ -247,7 +252,9 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                     onClick={() => setSelectedPeriodId(p.id)}
                     className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative flex flex-col justify-between gap-2.5 ${
                       isSelected
-                        ? 'bg-sky-500/10 border-sky-500 shadow-md ring-2 ring-sky-500/30'
+                        ? 'bg-sky-500/15 border-sky-500 shadow-md ring-2 ring-sky-500/40'
+                        : isCurrent
+                        ? 'bg-emerald-500/5 border-emerald-500/40 hover:border-emerald-500'
                         : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 hover:border-sky-300 dark:hover:border-slate-700'
                     }`}
                   >
@@ -260,16 +267,17 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                         Semana {p.periodNumber || idx + 1}
                       </span>
                       {isCurrent ? (
-                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[8px] font-black animate-pulse">
-                          En Curso
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-black animate-pulse flex items-center gap-1 shadow-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                          Semana en Curso
                         </span>
                       ) : p.status === 'CLOSED' ? (
                         <span className="px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[8px] font-bold">
-                          Cerrada
+                          Cerrada (Pagada)
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[8px] font-bold">
-                          Abierta
+                        <span className="px-1.5 py-0.5 rounded-md bg-slate-200/70 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[8px] font-bold">
+                          Por Iniciar
                         </span>
                       )}
                     </div>

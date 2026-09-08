@@ -19,7 +19,8 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
   if (!isOpen || !record) return null;
 
   const isWeekly = record.employee.paymentFrequency === 'SEMANAL';
-  const standardDays = isWeekly ? 7 : 30;
+  const isLunASab = record.employee.workSchedule === 'LUNES_A_SABADO' || (!record.employee.workSchedule && isWeekly);
+  const standardDays = isWeekly ? (isLunASab ? 6 : 5) : (isLunASab ? 24 : 20);
 
   const [workedDays, setWorkedDays] = useState(record.workedDays);
   const [overtimeHours, setOvertimeHours] = useState(record.overtimeHours);
@@ -29,7 +30,7 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
   // Cálculo en vivo
   const dailyRate = record.baseSalary / standardDays;
   const earnedBase = dailyRate * workedDays;
-  const regularHours = isWeekly ? 48 : 240;
+  const regularHours = isWeekly ? (isLunASab ? 48 : 40) : (isLunASab ? 192 : 160);
   const hourlyRate = record.baseSalary / regularHours;
   const overtimeAmount = overtimeHours * hourlyRate * 1.5;
   const totalEarnings = earnedBase + overtimeAmount + Number(bonusesAmount);

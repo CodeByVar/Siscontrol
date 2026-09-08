@@ -51,18 +51,25 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
     calculatePeriodPayroll,
     approveAndClosePeriod,
     markRecordAsUnpaid,
+    updateRecord,
     currentRole,
     currencySymbol,
   } = useApp();
 
   const [subTab, setSubTab] = useState<'CURRENT_WEEK' | 'MONTH_AUDIT'>('CURRENT_WEEK');
-  const weeklyPeriods = periods.filter((p) => p.frequency === 'SEMANAL');
+  const weeklyPeriods = [...periods.filter((p) => p.frequency === 'SEMANAL')].sort((a, b) =>
+    a.startDate.localeCompare(b.startDate)
+  );
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
 
   useEffect(() => {
     if (weeklyPeriods.length > 0 && !selectedPeriodId) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const currentWeekPeriod = weeklyPeriods.find(
+        (p) => todayStr >= p.startDate && todayStr <= p.endDate
+      );
       const openPeriod = weeklyPeriods.find((p) => p.status === 'OPEN');
-      setSelectedPeriodId(openPeriod ? openPeriod.id : weeklyPeriods[0].id);
+      setSelectedPeriodId(currentWeekPeriod ? currentWeekPeriod.id : openPeriod ? openPeriod.id : weeklyPeriods[0].id);
     }
   }, [weeklyPeriods, selectedPeriodId]);
 
@@ -173,27 +180,21 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
       {/* Vista de Semana en Curso */}
       {subTab === 'CURRENT_WEEK' && (
         <div className="space-y-6">
-          {/* Controles de Periodo */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="text-xs font-bold text-slate-500">Semana Seleccionada:</span>
-              {weeklyPeriods.length > 1 && (
-                <select
-                  value={selectedPeriodId}
-                  onChange={(e) => setSelectedPeriodId(e.target.value)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-800 dark:text-white focus:outline-none"
-                >
-                  {weeklyPeriods.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} {p.status === 'OPEN' ? '🟢 (En Curso)' : '🔒 (Cerrada)'}
-                    </option>
-                  ))}
-                </select>
-              )}
+          {/* 📅 SELECTOR DE SEMANAS EN BARRITAS INTERACTIVAS (Semana 1, 2, 3, 4, 5) */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-sky-500" />
+                  Semanas del Mes & Cómputo Salarial
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Selecciona la semana para ver la nómina y auditar los días trabajados con faltas o retrasos.
+                </p>
+              </div>
 
-              {/* Indicador de Semana en Curso vs Cerrada */}
-              {activePeriod && (
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                {activePeriod && (
                   <span
                     className={`px-3 py-1 rounded-xl text-xs font-black inline-flex items-center gap-1.5 border ${
                       activePeriod.status === 'OPEN'
@@ -204,34 +205,98 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                     {activePeriod.status === 'OPEN' ? (
                       <>
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        Semana en Curso (Activa)
+                        {activePeriod.name} en curso ({deadlineInfo.text})
                       </>
                     ) : (
                       <>
-                        <span>🔒</span> Semana Pasada (Cerrada)
+                        <span>🔒</span> {activePeriod.name} (Cerrada)
                       </>
                     )}
                   </span>
+                )}
 
-                  {activePeriod.status === 'OPEN' && (
-                    <span className={`text-[11px] ${deadlineInfo.color}`}>
-                      ({deadlineInfo.text})
-                    </span>
-                  )}
-                </div>
-              )}
+                {isBossOrAdmin && (
+                  <button
+                    onClick={() => onOpenAddPeriod('SEMANAL')}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    title="Crear otra semana de pago personalizada"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Otra Semana</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            {isBossOrAdmin && (
-              <button
-                onClick={() => onOpenAddPeriod('SEMANAL')}
-                className="px-4 py-2 rounded-xl text-xs font-extrabold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1.5 shadow-xs"
-                title="Crear otra semana de pago"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Otra Semana
-              </button>
-            )}
+            {/* Barritas de Semanas */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-1">
+              {weeklyPeriods.map((p, idx) => {
+                const isSelected = p.id === activePeriod?.id;
+                const isOpen = p.status === 'OPEN';
+                const todayStr = new Date().toISOString().split('T')[0];
+                const isCurrent = isOpen && todayStr >= p.startDate && todayStr <= p.endDate;
+
+                const pRecords = payrollRecords.filter((r) => r.periodId === p.id);
+                const weekNetSum = pRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
+                const paidCount = pRecords.filter((r) => r.status === 'PAID').length;
+
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedPeriodId(p.id)}
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative flex flex-col justify-between gap-2.5 ${
+                      isSelected
+                        ? 'bg-sky-500/10 border-sky-500 shadow-md ring-2 ring-sky-500/30'
+                        : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 hover:border-sky-300 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span
+                        className={`text-xs font-black ${
+                          isSelected ? 'text-sky-700 dark:text-sky-300' : 'text-slate-800 dark:text-slate-200'
+                        }`}
+                      >
+                        Semana {p.periodNumber || idx + 1}
+                      </span>
+                      {isCurrent ? (
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[8px] font-black animate-pulse">
+                          En Curso
+                        </span>
+                      ) : p.status === 'CLOSED' ? (
+                        <span className="px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[8px] font-bold">
+                          Cerrada
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[8px] font-bold">
+                          Abierta
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 block font-bold">
+                        {p.startDate.slice(5).replace('-', '/')} – {p.endDate.slice(5).replace('-', '/')}
+                      </span>
+                      <div className="flex items-center justify-between mt-1 pt-1.5 border-t border-slate-200 dark:border-slate-800 text-[10px]">
+                        <span className="font-mono font-black text-slate-700 dark:text-slate-300">
+                          {currencySymbol} {weekNetSum.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
+                        <span
+                          className={`font-semibold ${
+                            paidCount === pRecords.length && pRecords.length > 0
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-slate-400'
+                          }`}
+                        >
+                          {paidCount}/{pRecords.length} pagados
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
       {/* 🚨 ALERTA DE DEUDAS PENDIENTES / PAGOS ATRASADOS DE SEMANAS ANTERIORES */}
@@ -385,6 +450,7 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                 {activeRecords.map((rec) => {
                   const isPaid = rec.status === 'PAID';
                   const isLunASab = rec.employee.workSchedule === 'LUNES_A_SABADO' || !rec.employee.workSchedule;
+                  const standardDays = isLunASab ? 6 : 5;
 
                   // Verificar si este trabajador arrastra deuda de semanas anteriores
                   const workerPastDebts = pastUnpaidWeeklyRecords.filter(
@@ -421,14 +487,68 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                         </span>
                       </td>
 
-                      <td className="px-4 py-3.5 text-center font-mono">
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
-                          {rec.workedDays} días
-                        </span>
+                      {/* DÍAS TRABAJADOS (Control Rápido de Faltas) */}
+                      <td className="px-4 py-3.5 text-center">
+                        <div className="inline-flex flex-col items-center gap-1">
+                          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                            <button
+                              type="button"
+                              disabled={rec.workedDays <= 0 || isPaid}
+                              onClick={() => {
+                                const next = Math.max(0, rec.workedDays - 1);
+                                updateRecord(rec.id, { workedDays: next });
+                              }}
+                              className="w-6 h-6 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center font-black text-xs transition-colors disabled:opacity-25 cursor-pointer"
+                              title="Restar 1 día trabajado (Registrar inasistencia / falta)"
+                            >
+                              -
+                            </button>
+
+                            <span className="font-mono font-black text-xs px-2 text-slate-900 dark:text-white min-w-12 text-center">
+                              {rec.workedDays} {rec.workedDays === 1 ? 'día' : 'días'}
+                            </span>
+
+                            <button
+                              type="button"
+                              disabled={rec.workedDays >= standardDays || isPaid}
+                              onClick={() => {
+                                const next = Math.min(standardDays, rec.workedDays + 1);
+                                updateRecord(rec.id, { workedDays: next });
+                              }}
+                              className="w-6 h-6 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center justify-center font-black text-xs transition-colors disabled:opacity-25 cursor-pointer"
+                              title="Sumar 1 día trabajado"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          {rec.workedDays === standardDays ? (
+                            <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+                              ✓ Completo ({standardDays}/{standardDays}d)
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-black text-amber-700 dark:text-amber-300 bg-amber-500/15 px-1.5 py-0.2 rounded border border-amber-500/25">
+                              ⚠️ {standardDays - rec.workedDays} falta(s) esta sem.
+                            </span>
+                          )}
+                        </div>
                       </td>
 
-                      <td className="px-4 py-3.5 text-right font-mono font-bold text-slate-700 dark:text-slate-300">
-                        {currencySymbol} {Number(rec.baseSalary).toFixed(2)}
+                      {/* SUELDO BASE / PROPORCIONAL */}
+                      <td className="px-4 py-3.5 text-right font-mono">
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+                            {currencySymbol} {Number(rec.baseSalary).toFixed(2)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block font-normal">
+                            Diario: {currencySymbol} {(Number(rec.baseSalary) / standardDays).toFixed(2)}
+                          </span>
+                          {rec.workedDays < standardDays && (
+                            <span className="text-[9px] font-black text-red-600 dark:text-red-400 block bg-red-500/10 px-1 py-0.2 rounded border border-red-500/20">
+                              -{currencySymbol} {((Number(rec.baseSalary) / standardDays) * (standardDays - rec.workedDays)).toFixed(2)} (descuento)
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-4 py-3.5 text-right font-mono">

@@ -119,17 +119,73 @@ export const SYSTEM_USERS: Record<string, AppUser> = {
   },
 };
 
-// Periodos automáticos predeterminados
+// Periodos automáticos predeterminados para Septiembre 2026
 const DEFAULT_AUTO_PERIODS: PayrollPeriod[] = [
   {
-    id: 'per-sem-actual',
-    code: 'SEM-ACTUAL',
-    name: 'Semana Actual de Pago (En Curso)',
+    id: 'per-sem-1-sept-2026',
+    code: 'SEM-1-SEPT-2026',
+    name: 'Semana 1 (01 Sep - 06 Sep)',
     frequency: 'SEMANAL',
     startDate: '2026-09-01',
-    endDate: '2026-09-07',
+    endDate: '2026-09-06',
     year: 2026,
-    periodNumber: 36,
+    periodNumber: 1,
+    status: 'CLOSED',
+    totalGross: 0,
+    totalNet: 0,
+    totalAdvances: 0,
+  },
+  {
+    id: 'per-sem-actual',
+    code: 'SEM-2-SEPT-2026',
+    name: 'Semana 2 (07 Sep - 13 Sep)',
+    frequency: 'SEMANAL',
+    startDate: '2026-09-07',
+    endDate: '2026-09-13',
+    year: 2026,
+    periodNumber: 2,
+    status: 'OPEN',
+    totalGross: 0,
+    totalNet: 0,
+    totalAdvances: 0,
+  },
+  {
+    id: 'per-sem-3-sept-2026',
+    code: 'SEM-3-SEPT-2026',
+    name: 'Semana 3 (14 Sep - 20 Sep)',
+    frequency: 'SEMANAL',
+    startDate: '2026-09-14',
+    endDate: '2026-09-20',
+    year: 2026,
+    periodNumber: 3,
+    status: 'OPEN',
+    totalGross: 0,
+    totalNet: 0,
+    totalAdvances: 0,
+  },
+  {
+    id: 'per-sem-4-sept-2026',
+    code: 'SEM-4-SEPT-2026',
+    name: 'Semana 4 (21 Sep - 27 Sep)',
+    frequency: 'SEMANAL',
+    startDate: '2026-09-21',
+    endDate: '2026-09-27',
+    year: 2026,
+    periodNumber: 4,
+    status: 'OPEN',
+    totalGross: 0,
+    totalNet: 0,
+    totalAdvances: 0,
+  },
+  {
+    id: 'per-sem-5-sept-2026',
+    code: 'SEM-5-SEPT-2026',
+    name: 'Semana 5 (28 Sep - 30 Sep)',
+    frequency: 'SEMANAL',
+    startDate: '2026-09-28',
+    endDate: '2026-09-30',
+    year: 2026,
+    periodNumber: 5,
     status: 'OPEN',
     totalGross: 0,
     totalNet: 0,
@@ -394,7 +450,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [periods, setPeriods] = useState<PayrollPeriod[]>(() => {
     try {
       const saved = localStorage.getItem('importrivero_periods_v5');
-      return saved && JSON.parse(saved).length > 0 ? JSON.parse(saved) : DEFAULT_AUTO_PERIODS;
+      if (saved && JSON.parse(saved).length > 0) {
+        const parsed: PayrollPeriod[] = JSON.parse(saved);
+        const merged = [...parsed];
+        DEFAULT_AUTO_PERIODS.forEach((defP) => {
+          if (!merged.some((p) => p.id === defP.id || p.code === defP.code)) {
+            merged.push(defP);
+          }
+        });
+        return merged;
+      }
+      return DEFAULT_AUTO_PERIODS;
     } catch (e) {
       return DEFAULT_AUTO_PERIODS;
     }
@@ -664,93 +730,98 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       let updatedRecords = [...cleanPrev];
 
-      const openWeekly = periods.find((p) => p.frequency === 'SEMANAL' && p.status === 'OPEN') || periods.find((p) => p.frequency === 'SEMANAL');
-      const openMonthly = periods.find((p) => p.frequency === 'MENSUAL' && p.status === 'OPEN') || periods.find((p) => p.frequency === 'MENSUAL');
-
       const uniqueEmployees = deduplicateEmployees(employees);
 
-      uniqueEmployees.forEach((emp) => {
-        const targetPeriod = emp.paymentFrequency === 'SEMANAL' ? openWeekly : openMonthly;
-        if (!targetPeriod) return;
-
-        const isWeekly = emp.paymentFrequency === 'SEMANAL';
-        const isLunASab = emp.workSchedule === 'LUNES_A_SABADO' || (!emp.workSchedule && isWeekly);
-        const standardDays = isWeekly ? (isLunASab ? 6 : 5) : (isLunASab ? 24 : 20);
-
-        // Buscar registro existente por ID o por DNI
-        const existingRecord = updatedRecords.find(
-          (r) => r.periodId === targetPeriod.id && (r.employeeId === emp.id || r.employee?.dni === emp.dni)
+      periods.forEach((targetPeriod) => {
+        const isWeeklyPeriod = targetPeriod.frequency === 'SEMANAL';
+        const matchingEmployees = uniqueEmployees.filter((emp) =>
+          isWeeklyPeriod ? emp.paymentFrequency === 'SEMANAL' : emp.paymentFrequency === 'MENSUAL'
         );
 
-        const pendingAdvances = advances.filter(
-          (a) => (a.employeeId === emp.id || a.employeeDni === emp.dni) && a.status === 'PENDING'
-        );
-        const advancesSum = pendingAdvances.reduce((acc, a) => acc + Number(a.amount), 0);
+        matchingEmployees.forEach((emp) => {
+          const isWeekly = emp.paymentFrequency === 'SEMANAL';
+          const isLunASab = emp.workSchedule === 'LUNES_A_SABADO' || (!emp.workSchedule && isWeekly);
+          const standardDays = isWeekly ? (isLunASab ? 6 : 5) : (isLunASab ? 24 : 20);
 
-        if (!existingRecord) {
-          const totalEarnings = emp.baseSalary;
-          const totalDeductions = advancesSum;
-          const netAmount = Math.max(0, totalEarnings - totalDeductions);
+          // Buscar registro existente por ID o por DNI dentro de targetPeriod
+          const existingRecord = updatedRecords.find(
+            (r) => r.periodId === targetPeriod.id && (r.employeeId === emp.id || r.employee?.dni === emp.dni)
+          );
 
-          updatedRecords.push({
-            id: `rec-${targetPeriod.id}-${emp.id}`,
-            periodId: targetPeriod.id,
-            employeeId: emp.id,
-            employee: emp,
-            baseSalary: emp.baseSalary,
-            workedDays: standardDays,
-            overtimeHours: 0,
-            overtimeAmount: 0,
-            bonusesAmount: 0,
-            advancesDeduction: advancesSum,
-            otherDeductions: 0,
-            totalEarnings,
-            totalDeductions,
-            netAmount,
-            status: 'DRAFT',
-            paymentMethod: 'QR_BANCARIO',
-            items: [
-              {
-                id: '1',
-                name: `Salario Base (${standardDays} días)`,
-                type: 'EARNING',
-                amount: emp.baseSalary,
-              },
-              ...(advancesSum > 0
-                ? [
-                    {
-                      id: '2',
-                      name: 'Deducción de Adelanto',
-                      type: 'DEDUCTION' as const,
-                      amount: advancesSum,
-                    },
-                  ]
-                : []),
-            ],
-          });
-        } else {
-          updatedRecords = updatedRecords.map((rec) => {
-            if (rec.id === existingRecord.id && rec.status === 'DRAFT') {
-              const dailyRate = emp.baseSalary / standardDays;
-              const earnedBase = Number((dailyRate * rec.workedDays).toFixed(2));
-              const totalEarnings = earnedBase + Number(rec.overtimeAmount) + Number(rec.bonusesAmount);
-              const totalDeductions = advancesSum + Number(rec.otherDeductions);
-              const netAmount = Math.max(0, totalEarnings - totalDeductions);
+          // Solo deducir adelantos pendientes en la semana en curso (OPEN) o si el registro ya los dedujo
+          const isTargetOpen = targetPeriod.status === 'OPEN';
+          const pendingAdvances = isTargetOpen
+            ? advances.filter(
+                (a) => (a.employeeId === emp.id || a.employeeDni === emp.dni) && a.status === 'PENDING'
+              )
+            : [];
+          const advancesSum = pendingAdvances.reduce((acc, a) => acc + Number(a.amount), 0);
 
-              return {
-                ...rec,
-                employeeId: emp.id,
-                employee: emp,
-                baseSalary: emp.baseSalary,
-                advancesDeduction: advancesSum,
-                totalEarnings,
-                totalDeductions,
-                netAmount,
-              };
-            }
-            return rec;
-          });
-        }
+          if (!existingRecord) {
+            const totalEarnings = emp.baseSalary;
+            const totalDeductions = advancesSum;
+            const netAmount = Math.max(0, totalEarnings - totalDeductions);
+
+            updatedRecords.push({
+              id: `rec-${targetPeriod.id}-${emp.id}`,
+              periodId: targetPeriod.id,
+              employeeId: emp.id,
+              employee: emp,
+              baseSalary: emp.baseSalary,
+              workedDays: standardDays,
+              overtimeHours: 0,
+              overtimeAmount: 0,
+              bonusesAmount: 0,
+              advancesDeduction: advancesSum,
+              otherDeductions: 0,
+              totalEarnings,
+              totalDeductions,
+              netAmount,
+              status: 'DRAFT',
+              paymentMethod: 'QR_BANCARIO',
+              items: [
+                {
+                  id: '1',
+                  name: `Salario Base (${standardDays} días)`,
+                  type: 'EARNING',
+                  amount: emp.baseSalary,
+                },
+                ...(advancesSum > 0
+                  ? [
+                      {
+                        id: '2',
+                        name: 'Deducción de Adelanto',
+                        type: 'DEDUCTION' as const,
+                        amount: advancesSum,
+                      },
+                    ]
+                  : []),
+              ],
+            });
+          } else {
+            updatedRecords = updatedRecords.map((rec) => {
+              if (rec.id === existingRecord.id && rec.status === 'DRAFT') {
+                const dailyRate = emp.baseSalary / standardDays;
+                const earnedBase = Number((dailyRate * rec.workedDays).toFixed(2));
+                const totalEarnings = earnedBase + Number(rec.overtimeAmount) + Number(rec.bonusesAmount);
+                const totalDeductions = advancesSum + Number(rec.otherDeductions);
+                const netAmount = Math.max(0, totalEarnings - totalDeductions);
+
+                return {
+                  ...rec,
+                  employeeId: emp.id,
+                  employee: emp,
+                  baseSalary: emp.baseSalary,
+                  advancesDeduction: advancesSum,
+                  totalEarnings,
+                  totalDeductions,
+                  netAmount,
+                };
+              }
+              return rec;
+            });
+          }
+        });
       });
 
       // Deduplicación final estricta por (periodId + DNI)

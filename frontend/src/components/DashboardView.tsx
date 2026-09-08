@@ -47,15 +47,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const openWeeklyPeriod = periods.find((p) => p.frequency === 'SEMANAL' && p.status === 'OPEN');
   const openMonthlyPeriod = periods.find((p) => p.frequency === 'MENSUAL' && p.status === 'OPEN');
 
-  // Deudas pendientes de semanas anteriores
+  // Detección de Deudas Pendientes de Semanas Anteriores
+  // ÚNICAMENTE si ya se sobrepasó la fecha límite de pago (endDate < hoy) y el pago sigue pendiente
+  const todayStr = new Date().toISOString().split('T')[0];
+  const currentWeekPeriod = periods.find(
+    (p) =>
+      p.frequency === 'SEMANAL' &&
+      p.id !== 'per-sem-actual' &&
+      p.periodNumber !== 36 &&
+      todayStr >= p.startDate &&
+      todayStr <= p.endDate
+  );
+
   const pastUnpaidWeeklyRecords = payrollRecords.filter((rec) => {
-    if (rec.employee?.paymentFrequency !== 'SEMANAL' || rec.status === 'PAID') {
+    const emp =
+      employees.find((e) => e.id === rec.employeeId || (rec.employee?.dni && e.dni === rec.employee.dni)) ||
+      rec.employee;
+    if (emp?.paymentFrequency !== 'SEMANAL' || rec.status === 'PAID') {
       return false;
     }
     const recPeriod = periods.find((p) => p.id === rec.periodId);
     if (!recPeriod) return false;
-    return rec.periodId !== openWeeklyPeriod?.id || recPeriod.status === 'CLOSED';
+    // ÚNICAMENTE si ya venció el último día de esa semana (Domingo ya pasó en el calendario)
+    return recPeriod.endDate < todayStr;
   });
+
   const totalPastUnpaidDebt = pastUnpaidWeeklyRecords.reduce((acc, r) => acc + Number(r.netAmount), 0);
 
   return (
@@ -98,8 +114,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 🚨 Alerta de Deudas Pendientes de Semanas Anteriores */}
-      {pastUnpaidWeeklyRecords.length > 0 && (
+      {/* 🚨 Alerta de Control: SOLO se muestra si se sobrepasa del último día de pago de semanas anteriores */}
+      {pastUnpaidWeeklyRecords.length > 0 ? (
         <div
           onClick={() => setActiveTab('weekly')}
           className="p-4 sm:p-5 rounded-3xl bg-red-500/10 border-2 border-red-500/30 text-red-950 dark:text-red-200 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-red-500/15 transition-all"
@@ -113,7 +129,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 ⚠️ Alerta de Control: {pastUnpaidWeeklyRecords.length} Pago(s) Semanal(es) Atrasado(s) de Semanas Previas
               </h4>
               <p className="text-xs text-red-600/90 dark:text-red-300/80">
-                Hay salarios semanales pendientes de liquidar por un total de <strong>{currencySymbol} {totalPastUnpaidDebt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>. Haz clic aquí para liquidarlos.
+                Se sobrepasó la fecha límite de pago y hay salarios semanales pendientes de liquidar por un total de <strong>{currencySymbol} {totalPastUnpaidDebt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>. Haz clic aquí para liquidarlos.
               </p>
             </div>
           </div>
@@ -121,6 +137,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
             <span className="text-xs font-extrabold px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white flex items-center gap-1.5 shadow-sm transition-all">
               Liquidar Deudas <ArrowUpRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+      ) : (
+        /* 🟢 Tarjeta Informativa de la Semana en Curso cuando todo está al día */
+        <div
+          onClick={() => setActiveTab('weekly')}
+          className="p-4 sm:p-5 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-950 dark:text-emerald-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-emerald-500/15 transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
+              <CalendarDays className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  {currentWeekPeriod ? `${currentWeekPeriod.name} en curso` : 'Semana 2 en curso'}
+                </span>
+                <span className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300">
+                  Salarios Semanales al Día (Semana 1 ya pagada)
+                </span>
+              </div>
+              <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
+                {currentWeekPeriod
+                  ? `Periodo del ${currentWeekPeriod.startDate} al ${currentWeekPeriod.endDate}. Cierre y pago programado para el Domingo.`
+                  : 'Nóminas al día sin pagos atrasados.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <span className="text-xs font-extrabold px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 shadow-sm transition-all">
+              Ver Nómina Semanal <ArrowUpRight className="w-3.5 h-3.5" />
             </span>
           </div>
         </div>

@@ -139,6 +139,17 @@ export const updateEmployee = async (req: Request, res: Response) => {
     }
 
     if (existing) {
+      if (data.dni && existing.dni !== String(data.dni).trim()) {
+        const duplicate = await prisma.employee.findUnique({
+          where: { dni: String(data.dni).trim() },
+        });
+        if (duplicate && duplicate.id !== existing.id) {
+          return res.status(400).json({
+            error: `Ya existe otro trabajador registrado con el C.I. ${data.dni} (${duplicate.firstName} ${duplicate.lastName}).`,
+          });
+        }
+      }
+
       const employee = await prisma.employee.update({
         where: { id: existing.id },
         data,

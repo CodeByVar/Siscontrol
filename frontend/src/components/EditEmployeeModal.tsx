@@ -15,7 +15,7 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
   onClose,
   employee,
 }) => {
-  const { updateEmployee, currencySymbol } = useApp();
+  const { updateEmployee, employees, currencySymbol } = useApp();
 
   const [formData, setFormData] = useState({
     dni: '',
@@ -94,8 +94,25 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
       return;
     }
 
+    const cleanDni = formData.dni.trim();
+    if (!cleanDni) {
+      alert('El Carnet de Identidad (C.I.) es obligatorio.');
+      return;
+    }
+
+    // Validar que el nuevo C.I. no pertenezca a otro trabajador
+    const duplicateDni = employees.find(
+      (emp) => emp.id !== employee.id && emp.dni.trim().toLowerCase() === cleanDni.toLowerCase()
+    );
+    if (duplicateDni) {
+      alert(
+        `El C.I. "${cleanDni}" ya está registrado para el trabajador ${duplicateDni.firstName} ${duplicateDni.lastName}.`
+      );
+      return;
+    }
+
     updateEmployee(employee.id, {
-      dni: formData.dni,
+      dni: cleanDni,
       firstName: formData.firstName,
       lastName: formData.lastName,
       email: formData.email || undefined,
@@ -128,7 +145,8 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                 Editar Ficha & Condiciones Salariales
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {employee.lastName}, {employee.firstName} (DNI: {employee.dni})
+                {formData.lastName || employee.lastName}, {formData.firstName || employee.firstName} (C.I.:{' '}
+                <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{formData.dni || employee.dni}</span>)
               </p>
             </div>
           </div>
@@ -325,8 +343,22 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
             </div>
           </div>
 
-          {/* Teléfono y Estado */}
+          {/* C.I. y Teléfono */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-slate-700 dark:text-slate-300 font-bold mb-1 block flex items-center justify-between">
+                <span>C.I. / Carnet de Identidad *</span>
+                <span className="text-[10px] text-indigo-500 font-bold">Modificable</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.dni}
+                onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:border-indigo-500"
+                placeholder="Ej. 1234567"
+              />
+            </div>
             <div>
               <label className="text-slate-700 dark:text-slate-300 font-bold mb-1 block">Teléfono / WhatsApp</label>
               <input
@@ -334,20 +366,23 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                placeholder="Ej. 70012345"
               />
             </div>
-            <div>
-              <label className="text-slate-700 dark:text-slate-300 font-bold mb-1 block">Estado Laboral</label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as EmployeeStatus })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500"
-              >
-                <option value="ACTIVE" className="bg-white dark:bg-slate-900">ACTIVO (En Planilla)</option>
-                <option value="INACTIVE" className="bg-white dark:bg-slate-900">INACTIVO / RETIRADO</option>
-                <option value="ON_LEAVE" className="bg-white dark:bg-slate-900">DE VACACIÓN / LICENCIA</option>
-              </select>
-            </div>
+          </div>
+
+          {/* Estado Laboral */}
+          <div>
+            <label className="text-slate-700 dark:text-slate-300 font-bold mb-1 block">Estado Laboral</label>
+            <select
+              value={formData.status}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value as EmployeeStatus })}
+              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500"
+            >
+              <option value="ACTIVE" className="bg-white dark:bg-slate-900">ACTIVO (En Planilla)</option>
+              <option value="INACTIVE" className="bg-white dark:bg-slate-900">INACTIVO / RETIRADO</option>
+              <option value="ON_LEAVE" className="bg-white dark:bg-slate-900">DE VACACIÓN / LICENCIA</option>
+            </select>
           </div>
 
           {/* Banco y Cuenta */}

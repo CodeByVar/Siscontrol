@@ -206,7 +206,7 @@ export const recordAttendance = async (req: Request, res: Response) => {
 
 // 3. Obtener lista de marcajes con filtros (Protegido para Administrador)
 export const getAttendances = async (req: Request, res: Response) => {
-  const { date, employeeId, type } = req.query;
+  const { date, employeeId, type, startDate, endDate } = req.query;
 
   try {
     const where: any = {};
@@ -219,7 +219,18 @@ export const getAttendances = async (req: Request, res: Response) => {
       where.type = type;
     }
 
-    if (date) {
+    if (startDate && endDate) {
+      const start = new Date(String(startDate));
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(String(endDate));
+      end.setHours(23, 59, 59, 999);
+
+      where.timestamp = {
+        gte: start,
+        lte: end,
+      };
+    } else if (date) {
       const selectedDate = new Date(String(date));
       const startOfDay = new Date(selectedDate);
       startOfDay.setHours(0, 0, 0, 0);

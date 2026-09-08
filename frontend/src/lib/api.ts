@@ -241,10 +241,12 @@ export const api = {
         body: JSON.stringify(data),
       });
     },
-    getAll: async (date?: string, employeeId?: string) => {
+    getAll: async (date?: string, employeeId?: string, startDate?: string, endDate?: string) => {
       const params = new URLSearchParams();
       if (date) params.append('date', date);
       if (employeeId) params.append('employeeId', employeeId);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
       const query = params.toString() ? `?${params.toString()}` : '';
       return request<any[]>(`/attendance${query}`);
     },

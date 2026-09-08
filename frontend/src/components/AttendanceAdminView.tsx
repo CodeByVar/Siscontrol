@@ -22,6 +22,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
 import { AttendanceRecord } from '../types';
+import { WeeklyAttendanceMatrix } from './WeeklyAttendanceMatrix';
 
 interface AttendanceAdminViewProps {
   onOpenWorkerModal: () => void;
@@ -32,6 +33,7 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
 }) => {
   const { employees, backendStatus } = useApp();
 
+  const [viewTab, setViewTab] = useState<'DAILY' | 'WEEKLY'>('DAILY');
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -220,8 +222,42 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Tarjetas de Resumen Diario */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
+      {/* 2. Selector de Pestaña: Vista Diaria (GPS) vs Calendario Semanal (Multas 10 Bs) */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 w-fit">
+        <button
+          onClick={() => setViewTab('DAILY')}
+          className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+            viewTab === 'DAILY'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Clock className="w-4 h-4 text-brand-500" />
+          <span>Vista Diaria (Tiempo Real & GPS)</span>
+        </button>
+
+        <button
+          onClick={() => setViewTab('WEEKLY')}
+          className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+            viewTab === 'WEEKLY'
+              ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          <span>Calendario Semanal & Multas (10 Bs)</span>
+          <span className="px-1.5 py-0.2 rounded-md bg-white/20 text-white text-[9px] font-black">
+            Todos
+          </span>
+        </button>
+      </div>
+
+      {viewTab === 'WEEKLY' ? (
+        <WeeklyAttendanceMatrix onOpenWorkerModal={onOpenWorkerModal} />
+      ) : (
+        <>
+          {/* 3. Tarjetas de Resumen Diario */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
         {/* Presentes Ahora */}
         <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-emerald-500 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-2">
@@ -515,6 +551,8 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Sparkles,
@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   Calendar,
   MessageSquare,
+  Clock,
+  AlertTriangle,
 } from 'lucide-react';
 import { PayrollRecord, PayrollPeriod } from '../types';
 import { useApp } from '../context/AppContext';
@@ -25,7 +27,7 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
   record,
   period,
 }) => {
-  const { updateRecord, currentRole, currencySymbol } = useApp();
+  const { updateRecord, currentRole, currencySymbol, attendances } = useApp();
 
   const isBossOrAdmin = currentRole === 'SUPERADMIN' || currentRole === 'ADMINISTRADOR';
 
@@ -39,6 +41,43 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
 
   // Días laborables reales según jornada
   const standardDays = isWeekly ? (isLunASab ? 6 : 5) : (isLunASab ? 24 : 20);
+
+  // Marcajes reales de asistencia en el periodo actual
+  const { realDaysCount, lateCount, suggestedPenalty } = useMemo(() => {
+    if (!record || !period) return { realDaysCount: 0, lateCount: 0, suggestedPenalty: 0 };
+    const empAtts = attendances.filter((att) => {
+      const matchEmp =
+        att.employeeId === record.employeeId ||
+        (att.employee?.dni && att.employee.dni === record.employee.dni);
+      if (!matchEmp) return false;
+      const attDate = new Date(att.timestamp).toISOString().split('T')[0];
+      return attDate >= period.startDate && attDate <= period.endDate;
+    });
+
+    const checkIns = empAtts.filter((a) => a.type === 'CHECK_IN');
+    const uniqueDays = new Set(
+      checkIns.map((a) => new Date(a.timestamp).toISOString().split('T')[0])
+    );
+
+    const expectedTime = record.employee.expectedCheckInTime || '08:00';
+    const [expH, expM] = String(expectedTime).split(':').map(Number);
+    const scheduledMinutes = (isNaN(expH) ? 8 : expH) * 60 + (isNaN(expM) ? 0 : expM);
+
+    let lates = 0;
+    checkIns.forEach((ci) => {
+      const d = new Date(ci.timestamp);
+      const actualMinutes = d.getHours() * 60 + d.getMinutes();
+      if (actualMinutes > scheduledMinutes) {
+        lates++;
+      }
+    });
+
+    return {
+      realDaysCount: uniqueDays.size,
+      lateCount: lates,
+      suggestedPenalty: lates * 10,
+    };
+  }, [attendances, record, period]);
 
   useEffect(() => {
     if (record) {
@@ -150,6 +189,62 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
               <span className="text-[11px] text-slate-500 dark:text-slate-400">
                 Valor Día: <strong className="text-slate-900 dark:text-white font-mono">{currencySymbol} {dailyRate.toFixed(2)}</strong>
               </span>
+            </div>
+
+            {/* 🤖 NUEVO: Auto-completado Inteligente desde Marcajes de Asistencia */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-teal-500/10 border border-sky-500/30 dark:border-sky-500/20 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-sky-500/20 text-sky-600 dark:text-sky-400">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-900 dark:text-white text-xs flex items-center gap-1.5">
+                      Marcajes de Asistencia Reales
+                      <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-700 dark:text-sky-300">
+                        GPS / Biométrico
+                      </span>
+                    </h4>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Registro de entradas de {record.employee.firstName} en {period.name}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={!isBossOrAdmin || period.status === 'CLOSED'}
+                  onClick={() => {
+                    const daysToSet = Math.min(standardDays, realDaysCount);
+                    setWorkedDays(daysToSet);
+                    if (suggestedPenalty > 0) {
+                      setOtherDeductions((prev) => Math.max(prev, suggestedPenalty));
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-black text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  title="Auto-completar días trabajados y multas a partir de marcajes reales"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  Auto-llenar ({realDaysCount}d)
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-sky-200/50 dark:border-sky-800/50 text-[11px]">
+                <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                  📅 Marcó asistencia en <strong>{realDaysCount}</strong> de {standardDays} días
+                </span>
+                {lateCount > 0 ? (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-amber-500" />
+                    {lateCount} retraso(s) detectado(s) (-Bs {suggestedPenalty.toFixed(2)})
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                    Puntual (sin retrasos)
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Días Trabajados Slider */}

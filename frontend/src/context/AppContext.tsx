@@ -757,11 +757,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sincronización AUTOMÁTICA de trabajadores con periodos abiertos (SIN DUPLICADOS)
   useEffect(() => {
     setPayrollRecords((prevRecords) => {
+      const uniqueEmployees = deduplicateEmployees(employees);
+
       // 1. Limpiar duplicados previos de prevRecords por (periodId + employee.dni)
+      // Y purgar automáticamente registros borradores si el empleado cambió de modalidad (ej. SEMANAL a MENSUAL)
       const cleanPrev: PayrollRecord[] = [];
       const seenKeys = new Set<string>();
 
       prevRecords.forEach((r) => {
+        const currentEmp = uniqueEmployees.find(
+          (e) => e.id === r.employeeId || (r.employee?.dni && e.dni === r.employee.dni)
+        );
+        const periodObj = periods.find((p) => p.id === r.periodId);
+
+        // Si el empleado fue cambiado de modalidad y el registro aún está en BORRADOR (no pagado),
+        // se remueve inmediatamente de este periodo para que no figure en la nómina incorrecta
+        if (currentEmp && periodObj && r.status !== 'PAID') {
+          if (periodObj.frequency === 'SEMANAL' && currentEmp.paymentFrequency !== 'SEMANAL') {
+            return; // Omitir registro semanal de empleado mensual
+          }
+          if (periodObj.frequency === 'MENSUAL' && currentEmp.paymentFrequency !== 'MENSUAL') {
+            return; // Omitir registro mensual de empleado semanal
+          }
+        }
+
         const dni = r.employee?.dni || r.employeeId;
         const key = `${r.periodId}__${dni}`;
         if (!seenKeys.has(key)) {
@@ -771,8 +790,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       let updatedRecords = [...cleanPrev];
-
-      const uniqueEmployees = deduplicateEmployees(employees);
 
       periods.forEach((targetPeriod) => {
         const isWeeklyPeriod = targetPeriod.frequency === 'SEMANAL';
@@ -973,6 +990,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('importrivero_employees_v5', JSON.stringify(updated));
       return updated;
     });
+
+    // Si cambió de frecuencia (ej. de SEMANAL a MENSUAL), limpiar borradores no pagados del tipo anterior
+    if (updatedData.paymentFrequency) {
+      setPayrollRecords((prev) => {
+        const updated = prev.filter((r) => {
+          if (r.employeeId !== id && r.employee?.dni !== updatedData.dni) return true;
+          if (r.status === 'PAID') return true; // Respetar pagos históricos
+          const targetP = periods.find((p) => p.id === r.periodId);
+          if (!targetP) return true;
+          if (updatedData.paymentFrequency === 'MENSUAL' && targetP.frequency === 'SEMANAL') {
+            return false; // Quitar de nómina semanal
+          }
+          if (updatedData.paymentFrequency === 'SEMANAL' && targetP.frequency === 'MENSUAL') {
+            return false; // Quitar de nómina mensual
+          }
+          return true;
+        });
+        localStorage.setItem('importrivero_records_v5', JSON.stringify(updated));
+        return updated;
+      });
+    }
 
     confetti({
       particleCount: 40,

@@ -12,6 +12,8 @@ import {
   Clock,
   MessageSquare,
   AlertTriangle,
+  Sparkles,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PayrollRecord, PayrollPeriod } from '../types';
@@ -47,11 +49,14 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
 }) => {
   const {
     periods,
+    employees,
+    attendances,
     payrollRecords,
     calculatePeriodPayroll,
     approveAndClosePeriod,
     markRecordAsUnpaid,
     updateRecord,
+    updateEmployee,
     currentRole,
     currencySymbol,
   } = useApp();
@@ -78,7 +83,16 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   }, [weeklyPeriods, selectedPeriodId]);
 
   const activePeriod = weeklyPeriods.find((p) => p.id === selectedPeriodId) || weeklyPeriods[0];
-  const rawRecords = payrollRecords.filter((r) => r.periodId === (activePeriod?.id || ''));
+
+  // Filtrar estrictamente solo trabajadores cuya modalidad actual sea SEMANAL
+  const rawRecords = payrollRecords.filter((r) => {
+    if (r.periodId !== (activePeriod?.id || '')) return false;
+    const emp =
+      employees.find((e) => e.id === r.employeeId || (r.employee?.dni && e.dni === r.employee.dni)) ||
+      r.employee;
+    return emp?.paymentFrequency === 'SEMANAL';
+  });
+
   // Deduplicación estricta por Carnet de Identidad (DNI) para evitar filas dobles
   const activeRecords = rawRecords.filter((rec, index, self) => {
     const key = rec.employee?.dni || rec.employeeId;
@@ -95,10 +109,13 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   const pendingRecordsCount = activeRecords.filter((r) => r.status !== 'PAID').length;
 
   // Detección de Deudas Pendientes de Semanas Anteriores (Control de Pagos Atrasados)
-  // ÚNICAMENTE periodos que ya cerraron en el pasado (endDate < hoy)
+  // ÚNICAMENTE periodos que ya cerraron en el pasado (endDate < hoy) de trabajadores SEMANALES
   const todayStr = new Date().toISOString().split('T')[0];
   const pastUnpaidWeeklyRecords = payrollRecords.filter((rec) => {
-    if (rec.employee?.paymentFrequency !== 'SEMANAL' || rec.status === 'PAID') {
+    const emp =
+      employees.find((e) => e.id === rec.employeeId || (rec.employee?.dni && e.dni === rec.employee.dni)) ||
+      rec.employee;
+    if (emp?.paymentFrequency !== 'SEMANAL' || rec.status === 'PAID') {
       return false;
     }
     const recPeriod = periods.find((p) => p.id === rec.periodId);
@@ -112,6 +129,86 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   );
 
   const deadlineInfo = getWeeklyDeadlineInfo();
+
+  // 🤖 AUTO-SINCRONIZACIÓN DE DÍAS TRABAJADOS A PARTIR DE MARCAJES REALES
+  const handleAutoSyncAllAttendances = () => {
+    if (!activePeriod) return;
+    let syncedWorkers = 0;
+    let totalLatesFound = 0;
+
+    activeRecords.forEach((rec) => {
+      if (rec.status === 'PAID') return; // no alterar semanas ya pagadas
+
+      const emp =
+        employees.find((e) => e.id === rec.employeeId || (rec.employee?.dni && e.dni === rec.employee.dni)) ||
+        rec.employee;
+      const isLunASab = emp.workSchedule === 'LUNES_A_SABADO' || (!emp.workSchedule && emp.paymentFrequency === 'SEMANAL');
+      const standardDays = isLunASab ? 6 : 5;
+
+      // Buscar marcajes de este empleado en las fechas de esta semana
+      const empAtts = attendances.filter((att) => {
+        const matches =
+          att.employeeId === rec.employeeId ||
+          (att.employee?.dni && att.employee.dni === rec.employee.dni);
+        if (!matches) return false;
+        const attDate = new Date(att.timestamp).toISOString().split('T')[0];
+        return attDate >= activePeriod.startDate && attDate <= activePeriod.endDate;
+      });
+
+      const checkIns = empAtts.filter((a) => a.type === 'CHECK_IN');
+      const uniqueDates = new Set(
+        checkIns.map((a) => new Date(a.timestamp).toISOString().split('T')[0])
+      );
+      const attendedDays = Math.min(standardDays, uniqueDates.size);
+
+      // Calcular retrasos (10 Bs c/u)
+      const expectedTime = emp.expectedCheckInTime || '08:00';
+      const [expH, expM] = String(expectedTime).split(':').map(Number);
+      const scheduledMinutes = (isNaN(expH) ? 8 : expH) * 60 + (isNaN(expM) ? 0 : expM);
+
+      let lates = 0;
+      checkIns.forEach((ci) => {
+        const d = new Date(ci.timestamp);
+        const actualMinutes = d.getHours() * 60 + d.getMinutes();
+        if (actualMinutes > scheduledMinutes) {
+          lates++;
+        }
+      });
+
+      totalLatesFound += lates;
+      const latePenalty = lates * 10;
+
+      // Si tiene asistencias marcadas, ajustar días trabajados y multas
+      if (uniqueDates.size > 0 || lates > 0) {
+        updateRecord(rec.id, {
+          workedDays: attendedDays,
+          otherDeductions: latePenalty > 0 ? Math.max(Number(rec.otherDeductions) || 0, latePenalty) : rec.otherDeductions,
+        });
+        syncedWorkers++;
+      }
+    });
+
+    if (syncedWorkers > 0) {
+      alert(
+        `✓ ¡Sincronización Completada!\n\nSe autocompletaron los días trabajados de ${syncedWorkers} trabajador(es) según sus marcajes reales de asistencia en ${activePeriod.name}.\nRetrasos detectados: ${totalLatesFound} (-Bs ${totalLatesFound * 10} en multas).`
+      );
+    } else {
+      alert(
+        `ℹ️ No se encontraron nuevos marcajes de entrada en el rango (${activePeriod.startDate} al ${activePeriod.endDate}). Los días se mantienen según lo establecido.`
+      );
+    }
+  };
+
+  // Función rápida para mover un trabajador erróneamente puesto en semanal a mensual
+  const handleSwitchToMonthly = (empId: string, empName: string) => {
+    if (
+      confirm(
+        `¿Confirmas cambiar a ${empName} a PAGO MENSUAL?\n\n- Se eliminará de la nómina semanal actual.\n- Pasará a figurar en la Nómina Mensual.\n- No se perderá ningún adelanto ni historial de asistencias.`
+      )
+    ) {
+      updateEmployee(empId, { paymentFrequency: 'MENSUAL' });
+    }
+  };
 
   const handleCloseWeek = () => {
     if (pendingRecordsCount > 0) {
@@ -426,6 +523,33 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
 
       {/* Tabla de Nómina Semanal con botón WhatsApp */}
       <div className="glass-panel rounded-3xl border border-slate-200 dark:border-slate-800/80 overflow-hidden shadow-sm">
+        {/* Barra superior con botón de auto-sincronización de asistencias */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800">
+          <div>
+            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+              <span>Personal con Pago Semanal</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold border border-sky-500/20">
+                {activeRecords.length} en planilla
+              </span>
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Liquidación y cómputo de sueldos para {activePeriod.name} ({activePeriod.startDate} al {activePeriod.endDate})
+            </p>
+          </div>
+
+          {activeRecords.length > 0 && isBossOrAdmin && activePeriod.status === 'OPEN' && (
+            <button
+              type="button"
+              onClick={handleAutoSyncAllAttendances}
+              className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer self-start sm:self-auto"
+              title="Sincronizar automáticamente días trabajados y multas por retrasos a partir de los registros de entrada de esta semana"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>Auto-llenar Días desde Asistencias</span>
+            </button>
+          )}
+        </div>
+
         {activeRecords.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <Users className="w-10 h-10 text-slate-400 mx-auto" />
@@ -678,6 +802,22 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
                           >
                             <FileText className="w-3.5 h-3.5" />
                           </button>
+
+                          {/* 🔄 ¿Se registró como semanal por error? Mover a Mensual con 1 clic */}
+                          {!isPaid && isBossOrAdmin && (
+                            <button
+                              onClick={() =>
+                                handleSwitchToMonthly(
+                                  rec.employeeId,
+                                  `${rec.employee.firstName} ${rec.employee.lastName}`
+                                )
+                              }
+                              className="p-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-600 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 dark:text-purple-300 transition-colors"
+                              title="¿Se registró como semanal por error? Cambiar a Pago Mensual"
+                            >
+                              <ArrowRightLeft className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

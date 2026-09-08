@@ -16,6 +16,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { api } from '../lib/api';
 import { PayrollRecord, PayrollPeriod } from '../types';
 import { sendPayslipViaWhatsApp } from '../lib/whatsappGenerator';
 import { WeeklyMonthAuditView } from './WeeklyMonthAuditView';
@@ -131,8 +132,24 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
   const deadlineInfo = getWeeklyDeadlineInfo();
 
   // 🤖 AUTO-SINCRONIZACIÓN DE DÍAS TRABAJADOS A PARTIR DE MARCAJES REALES
-  const handleAutoSyncAllAttendances = () => {
+  const handleAutoSyncAllAttendances = async () => {
     if (!activePeriod) return;
+
+    let freshAttendances = attendances;
+    try {
+      const res = await api.attendance.getAll(
+        undefined,
+        undefined,
+        activePeriod.startDate,
+        activePeriod.endDate
+      );
+      if (Array.isArray(res)) {
+        freshAttendances = res;
+      }
+    } catch (e) {
+      console.warn('Error cargando marcajes para auto-sync:', e);
+    }
+
     let syncedWorkers = 0;
     let totalLatesFound = 0;
 
@@ -145,19 +162,39 @@ export const WeeklyPayrollView: React.FC<WeeklyPayrollViewProps> = ({
       const isLunASab = emp.workSchedule === 'LUNES_A_SABADO' || (!emp.workSchedule && emp.paymentFrequency === 'SEMANAL');
       const standardDays = isLunASab ? 6 : 5;
 
+      const targetId = String(rec.employeeId || '').trim();
+      const targetDni = String(emp?.dni || rec.employee?.dni || '').trim();
+
       // Buscar marcajes de este empleado en las fechas de esta semana
-      const empAtts = attendances.filter((att) => {
-        const matches =
-          att.employeeId === rec.employeeId ||
-          (att.employee?.dni && att.employee.dni === rec.employee.dni);
+      const empAtts = freshAttendances.filter((att) => {
+        const attId = String(att.employeeId || '').trim();
+        const attDni = String(att.employee?.dni || (att as any).employeeDni || '').trim();
+
+        const matches = (targetId && attId === targetId) || (targetDni && attDni === targetDni);
         if (!matches) return false;
-        const attDate = new Date(att.timestamp).toISOString().split('T')[0];
-        return attDate >= activePeriod.startDate && attDate <= activePeriod.endDate;
+
+        const d = new Date(att.timestamp);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const localDate = `${y}-${m}-${day}`;
+        const isoDate = d.toISOString().split('T')[0];
+
+        return (
+          (localDate >= activePeriod.startDate && localDate <= activePeriod.endDate) ||
+          (isoDate >= activePeriod.startDate && isoDate <= activePeriod.endDate)
+        );
       });
 
       const checkIns = empAtts.filter((a) => a.type === 'CHECK_IN');
       const uniqueDates = new Set(
-        checkIns.map((a) => new Date(a.timestamp).toISOString().split('T')[0])
+        checkIns.map((a) => {
+          const d = new Date(a.timestamp);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}`;
+        })
       );
       const attendedDays = Math.min(standardDays, uniqueDates.size);
 

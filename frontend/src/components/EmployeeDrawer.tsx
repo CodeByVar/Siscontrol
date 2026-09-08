@@ -8,9 +8,11 @@ import {
   MessageSquare,
   Clock,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react';
-import { PayrollRecord, PayrollPeriod } from '../types';
+import { PayrollRecord, PayrollPeriod, AttendanceRecord } from '../types';
 import { useApp } from '../context/AppContext';
+import { api } from '../lib/api';
 import { generatePayslipPDF } from '../lib/pdfGenerator';
 import { sendPayslipViaWhatsApp } from '../lib/whatsappGenerator';
 
@@ -36,27 +38,79 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
   const [bonusesAmount, setBonusesAmount] = useState(0);
   const [otherDeductions, setOtherDeductions] = useState(0);
 
+  // Marcajes en vivo del backend para este periodo
+  const [liveAttendances, setLiveAttendances] = useState<AttendanceRecord[]>([]);
+  const [isLoadingAtts, setIsLoadingAtts] = useState<boolean>(false);
+
   const isWeekly = record?.employee.paymentFrequency === 'SEMANAL';
   const isLunASab = record?.employee.workSchedule === 'LUNES_A_SABADO' || (!record?.employee.workSchedule && isWeekly);
 
   // Días laborables reales según jornada
   const standardDays = isWeekly ? (isLunASab ? 6 : 5) : (isLunASab ? 24 : 20);
 
+  // Cargar asistencias reales de la semana desde el backend al abrir el drawer
+  useEffect(() => {
+    let isMounted = true;
+    if (period?.startDate && period?.endDate) {
+      setIsLoadingAtts(true);
+      api.attendance
+        .getAll(undefined, undefined, period.startDate, period.endDate)
+        .then((records) => {
+          if (isMounted && Array.isArray(records)) {
+            setLiveAttendances(records);
+          }
+        })
+        .catch((err) => console.warn('Error al cargar asistencias para el drawer:', err))
+        .finally(() => {
+          if (isMounted) setIsLoadingAtts(false);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [period?.id, period?.startDate, period?.endDate, record?.employeeId]);
+
   // Marcajes reales de asistencia en el periodo actual
+  const sourceAttendances = liveAttendances.length > 0 ? liveAttendances : attendances;
+
   const { realDaysCount, lateCount, suggestedPenalty } = useMemo(() => {
     if (!record || !period) return { realDaysCount: 0, lateCount: 0, suggestedPenalty: 0 };
-    const empAtts = attendances.filter((att) => {
-      const matchEmp =
-        att.employeeId === record.employeeId ||
-        (att.employee?.dni && att.employee.dni === record.employee.dni);
+
+    const targetDni = String(record.employee?.dni || '').trim();
+    const targetId = String(record.employeeId || '').trim();
+
+    const empAtts = sourceAttendances.filter((att) => {
+      const attId = String(att.employeeId || '').trim();
+      const attDni = String(att.employee?.dni || (att as any).employeeDni || '').trim();
+
+      const matchEmp = (targetId && attId === targetId) || (targetDni && attDni === targetDni);
       if (!matchEmp) return false;
-      const attDate = new Date(att.timestamp).toISOString().split('T')[0];
-      return attDate >= period.startDate && attDate <= period.endDate;
+
+      // Extraer fecha del marcaje (tanto local como ISO)
+      const d = new Date(att.timestamp);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const localDate = `${y}-${m}-${day}`;
+      const isoDate = d.toISOString().split('T')[0];
+
+      return (
+        (localDate >= period.startDate && localDate <= period.endDate) ||
+        (isoDate >= period.startDate && isoDate <= period.endDate)
+      );
     });
 
     const checkIns = empAtts.filter((a) => a.type === 'CHECK_IN');
+
+    // Días únicos trabajados
     const uniqueDays = new Set(
-      checkIns.map((a) => new Date(a.timestamp).toISOString().split('T')[0])
+      checkIns.map((a) => {
+        const d = new Date(a.timestamp);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      })
     );
 
     const expectedTime = record.employee.expectedCheckInTime || '08:00';
@@ -77,16 +131,29 @@ export const EmployeeDrawer: React.FC<EmployeeDrawerProps> = ({
       lateCount: lates,
       suggestedPenalty: lates * 10,
     };
-  }, [attendances, record, period]);
+  }, [sourceAttendances, record, period]);
 
   useEffect(() => {
     if (record) {
-      setWorkedDays(record.workedDays <= standardDays ? record.workedDays : standardDays);
+      // Si el registro estaba en 0 pero ya tiene marcajes registrados en el sistema, pre-cargar los días reales
+      const initialDays =
+        record.workedDays === 0 && realDaysCount > 0
+          ? Math.min(standardDays, realDaysCount)
+          : record.workedDays <= standardDays
+          ? record.workedDays
+          : standardDays;
+
+      setWorkedDays(initialDays);
       setOvertimeHours(record.overtimeHours);
       setBonusesAmount(record.bonusesAmount);
-      setOtherDeductions(record.otherDeductions);
+
+      const initialDeductions =
+        record.otherDeductions === 0 && suggestedPenalty > 0
+          ? suggestedPenalty
+          : record.otherDeductions;
+      setOtherDeductions(initialDeductions);
     }
-  }, [record, standardDays]);
+  }, [record, standardDays, realDaysCount, suggestedPenalty]);
 
   if (!isOpen || !record || !period) return null;
 

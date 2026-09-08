@@ -540,6 +540,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Precargar marcajes de asistencia automáticamente al iniciar la app
+  useEffect(() => {
+    api.attendance
+      .getAll()
+      .then((remote) => {
+        if (Array.isArray(remote) && remote.length > 0) {
+          setAttendances(remote);
+          localStorage.setItem('importrivero_attendances_v1', JSON.stringify(remote));
+        }
+      })
+      .catch((err) => console.warn('Error al precargar asistencias iniciales:', err));
+  }, []);
+
   const recordAttendanceCheck = async (data: {
     dni: string;
     type?: AttendanceType;

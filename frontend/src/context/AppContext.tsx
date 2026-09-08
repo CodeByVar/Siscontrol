@@ -446,13 +446,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await fetchAttendances();
       return { success: true, message: res.message, data: res.attendance };
     } catch (err: any) {
+      // Si el backend respondió con un error de negocio (400, 403, 409), no enmascarar ni guardar duplicado
+      if (err.isApiError || (err.status && err.status >= 400 && err.status < 500)) {
+        return { success: false, message: err.message || 'Operación rechazada por el servidor' };
+      }
+
+      // Si se encuentra sin conexión a internet (Modo Offline), aplicar la misma regla anti-duplicados
       const emp = employees.find((e) => e.dni === data.dni);
       if (emp) {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const workerAttendancesToday = attendances
+          .filter((a) => a.employeeId === emp.id && new Date(a.timestamp) >= startOfToday)
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        const latestToday = workerAttendancesToday[0];
+        const requestedType = data.type || 'CHECK_IN';
+
+        if (requestedType === 'CHECK_IN') {
+          if (latestToday && latestToday.type === 'CHECK_IN') {
+            const timeStr = new Date(latestToday.timestamp).toLocaleTimeString('es-BO', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            return {
+              success: false,
+              message: `Ya registraste tu ENTRADA hoy a las ${timeStr}. Tu siguiente marcaje debe ser tu SALIDA.`,
+            };
+          }
+          if (latestToday && latestToday.type === 'CHECK_OUT') {
+            const timeStr = new Date(latestToday.timestamp).toLocaleTimeString('es-BO', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            return {
+              success: false,
+              message: `Ya registraste tu SALIDA hoy a las ${timeStr}. Tu jornada de hoy ya está concluida.`,
+            };
+          }
+        } else if (requestedType === 'CHECK_OUT') {
+          if (!latestToday) {
+            return {
+              success: false,
+              message: 'No puedes marcar SALIDA sin haber registrado previamente tu ENTRADA hoy.',
+            };
+          }
+          if (latestToday.type === 'CHECK_OUT') {
+            const timeStr = new Date(latestToday.timestamp).toLocaleTimeString('es-BO', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            return {
+              success: false,
+              message: `Ya registraste tu SALIDA hoy a las ${timeStr}. Tu jornada ya fue completada.`,
+            };
+          }
+        }
+
         const localAtt: AttendanceRecord = {
           id: `att-${Date.now()}`,
           employeeId: emp.id,
           employee: emp,
-          type: data.type || 'CHECK_IN',
+          type: requestedType,
           timestamp: new Date().toISOString(),
           latitude: data.latitude,
           longitude: data.longitude,
@@ -461,7 +517,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         setAttendances((prev) => [localAtt, ...prev]);
         confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-        return { success: true, message: 'Marcaje guardado correctamente (Modo local)', data: localAtt };
+        return {
+          success: true,
+          message:
+            requestedType === 'CHECK_IN'
+              ? '¡Entrada registrada con éxito! (Modo local)'
+              : '¡Salida registrada con éxito! (Modo local)',
+          data: localAtt,
+        };
       }
       return { success: false, message: err.message || 'Error al registrar marcaje' };
     }

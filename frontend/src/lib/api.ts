@@ -64,7 +64,10 @@ const request = async <T>(
     } catch {
       // Ignorar si no es JSON
     }
-    throw new Error(errorMessage);
+    const err: any = new Error(errorMessage);
+    err.status = response.status;
+    err.isApiError = true;
+    throw err;
   }
 
   return response.json() as Promise<T>;
@@ -212,7 +215,13 @@ export const api = {
       return request<{
         employee: any;
         latestAttendanceToday?: any;
+        todayAttendances?: any[];
         suggestedNextType: 'CHECK_IN' | 'CHECK_OUT';
+        statusToday?: 'AUSENTE' | 'PRESENTE' | 'FINALIZO_JORNADA';
+        canCheckIn?: boolean;
+        canCheckOut?: boolean;
+        checkInDisabledReason?: string;
+        checkOutDisabledReason?: string;
       }>(`/attendance/worker/${encodeURIComponent(dni)}`);
     },
     record: async (data: {

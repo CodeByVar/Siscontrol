@@ -36,11 +36,11 @@ export const verifyWorkerByDni = async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'El trabajador no se encuentra activo en el sistema' });
     }
 
-    // Consultar el último marcaje de hoy para este trabajador
+    // Consultar el historial de marcajes de hoy para este trabajador
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const latestAttendanceToday = await prisma.attendance.findFirst({
+    const todayAttendances = await prisma.attendance.findMany({
       where: {
         employeeId: employee.id,
         timestamp: { gte: startOfToday },
@@ -48,10 +48,50 @@ export const verifyWorkerByDni = async (req: Request, res: Response) => {
       orderBy: { timestamp: 'desc' },
     });
 
+    const latestAttendanceToday = todayAttendances[0] || null;
+
+    let statusToday: 'AUSENTE' | 'PRESENTE' | 'FINALIZO_JORNADA' = 'AUSENTE';
+    let canCheckIn = true;
+    let canCheckOut = false;
+    let checkInDisabledReason = '';
+    let checkOutDisabledReason = '';
+
+    if (!latestAttendanceToday) {
+      statusToday = 'AUSENTE';
+      canCheckIn = true;
+      canCheckOut = false;
+      checkOutDisabledReason = 'Debes registrar tu ENTRADA antes de poder marcar la salida.';
+    } else if (latestAttendanceToday.type === 'CHECK_IN') {
+      statusToday = 'PRESENTE';
+      canCheckIn = false;
+      canCheckOut = true;
+      const timeStr = new Date(latestAttendanceToday.timestamp).toLocaleTimeString('es-BO', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      checkInDisabledReason = `Ya registraste tu ENTRADA hoy a las ${timeStr}. Tu siguiente registro debe ser tu SALIDA.`;
+    } else if (latestAttendanceToday.type === 'CHECK_OUT') {
+      statusToday = 'FINALIZO_JORNADA';
+      canCheckIn = false;
+      canCheckOut = false;
+      const timeStr = new Date(latestAttendanceToday.timestamp).toLocaleTimeString('es-BO', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      checkInDisabledReason = `Ya registraste tu SALIDA hoy a las ${timeStr}. Tu jornada de hoy ya está concluida.`;
+      checkOutDisabledReason = `Ya registraste tu SALIDA hoy a las ${timeStr}. No es necesario volver a marcar.`;
+    }
+
     return res.json({
       employee,
       latestAttendanceToday,
+      todayAttendances,
       suggestedNextType: latestAttendanceToday?.type === 'CHECK_IN' ? 'CHECK_OUT' : 'CHECK_IN',
+      statusToday,
+      canCheckIn,
+      canCheckOut,
+      checkInDisabledReason,
+      checkOutDisabledReason,
     });
   } catch (error) {
     console.error('Error al verificar trabajador por C.I.:', error);
@@ -81,6 +121,54 @@ export const recordAttendance = async (req: Request, res: Response) => {
     }
 
     const attendanceType = type === 'CHECK_OUT' ? 'CHECK_OUT' : 'CHECK_IN';
+
+    // Validación estricta anti-duplicados para el mismo día
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const latestAttendanceToday = await prisma.attendance.findFirst({
+      where: {
+        employeeId: employee.id,
+        timestamp: { gte: startOfToday },
+      },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    if (attendanceType === 'CHECK_IN') {
+      if (latestAttendanceToday && latestAttendanceToday.type === 'CHECK_IN') {
+        const timeStr = new Date(latestAttendanceToday.timestamp).toLocaleTimeString('es-BO', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        return res.status(400).json({
+          error: `Ya tienes una ENTRADA registrada hoy a las ${timeStr}. No puedes registrar doble entrada; tu siguiente marcaje debe ser tu SALIDA.`,
+        });
+      }
+      if (latestAttendanceToday && latestAttendanceToday.type === 'CHECK_OUT') {
+        const timeStr = new Date(latestAttendanceToday.timestamp).toLocaleTimeString('es-BO', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        return res.status(400).json({
+          error: `Ya registraste tu SALIDA de hoy a las ${timeStr}. Tu jornada de hoy ya está concluida.`,
+        });
+      }
+    } else if (attendanceType === 'CHECK_OUT') {
+      if (!latestAttendanceToday) {
+        return res.status(400).json({
+          error: 'No puedes marcar SALIDA sin haber registrado previamente una ENTRADA el día de hoy.',
+        });
+      }
+      if (latestAttendanceToday.type === 'CHECK_OUT') {
+        const timeStr = new Date(latestAttendanceToday.timestamp).toLocaleTimeString('es-BO', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        return res.status(400).json({
+          error: `Ya registraste tu SALIDA hoy a las ${timeStr}. No puedes registrar doble salida.`,
+        });
+      }
+    }
 
     const attendance = await prisma.attendance.create({
       data: {

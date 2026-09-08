@@ -38,7 +38,7 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
   onClose,
   isPublicMode = false,
 }) => {
-  const { recordAttendanceCheck, employees, currencySymbol } = useApp();
+  const { recordAttendanceCheck, employees, attendances, currencySymbol } = useApp();
 
   // Modo: 'ATTENDANCE' (Marcar GPS) o 'PORTAL' (Consultar Sueldos / Boletas)
   const [activeMode, setActiveMode] = useState<'ATTENDANCE' | 'PORTAL'>('ATTENDANCE');
@@ -48,6 +48,11 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
   const [verifiedWorker, setVerifiedWorker] = useState<any | null>(null);
   const [latestAttendance, setLatestAttendance] = useState<any | null>(null);
   const [suggestedType, setSuggestedType] = useState<AttendanceType>('CHECK_IN');
+  const [canCheckIn, setCanCheckIn] = useState<boolean>(true);
+  const [canCheckOut, setCanCheckOut] = useState<boolean>(false);
+  const [checkInDisabledReason, setCheckInDisabledReason] = useState<string>('');
+  const [checkOutDisabledReason, setCheckOutDisabledReason] = useState<string>('');
+  const [statusToday, setStatusToday] = useState<'AUSENTE' | 'PRESENTE' | 'FINALIZO_JORNADA'>('AUSENTE');
 
   const [location, setLocation] = useState<{
     latitude: number | null;
@@ -129,6 +134,11 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
     setVerifiedWorker(null);
     setLatestAttendance(null);
     setFeedback(null);
+    setCanCheckIn(true);
+    setCanCheckOut(false);
+    setCheckInDisabledReason('');
+    setCheckOutDisabledReason('');
+    setStatusToday('AUSENTE');
   };
 
   const resetPortalForm = () => {
@@ -142,26 +152,79 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
     setPortalError('');
   };
 
-  // 1. Verificar C.I. para Marcaje
-  const handleVerifyDni = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!dniInput.trim()) return;
+  // 1. Verificar C.I. y estado de asistencia de hoy para Marcaje
+  const verifyWorkerDni = async (targetDni: string) => {
+    const cleanDni = targetDni.trim();
+    if (!cleanDni) return;
 
     setFeedback(null);
+    setDniInput(cleanDni);
 
     try {
-      const res = await api.attendance.verifyWorker(dniInput.trim());
+      const res = await api.attendance.verifyWorker(cleanDni);
       if (res && res.employee) {
         setVerifiedWorker(res.employee);
         setLatestAttendance(res.latestAttendanceToday || null);
         setSuggestedType(res.suggestedNextType || 'CHECK_IN');
+        setStatusToday(
+          res.statusToday ||
+            (res.latestAttendanceToday?.type === 'CHECK_IN'
+              ? 'PRESENTE'
+              : res.latestAttendanceToday?.type === 'CHECK_OUT'
+              ? 'FINALIZO_JORNADA'
+              : 'AUSENTE')
+        );
+        setCanCheckIn(res.canCheckIn ?? (!res.latestAttendanceToday || res.latestAttendanceToday.type === 'CHECK_OUT'));
+        setCanCheckOut(res.canCheckOut ?? (res.latestAttendanceToday?.type === 'CHECK_IN'));
+        setCheckInDisabledReason(res.checkInDisabledReason || '');
+        setCheckOutDisabledReason(res.checkOutDisabledReason || '');
         return;
       }
     } catch {
-      const localEmp = employees.find((emp) => emp.dni === dniInput.trim());
+      // Fallback local (offline)
+      const localEmp = employees.find((emp) => emp.dni === cleanDni);
       if (localEmp) {
         setVerifiedWorker(localEmp);
-        setSuggestedType('CHECK_IN');
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const localAttsToday = attendances
+          .filter((a) => a.employeeId === localEmp.id && new Date(a.timestamp) >= startOfToday)
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        const latest = localAttsToday[0] || null;
+        setLatestAttendance(latest);
+
+        if (!latest) {
+          setStatusToday('AUSENTE');
+          setSuggestedType('CHECK_IN');
+          setCanCheckIn(true);
+          setCanCheckOut(false);
+          setCheckOutDisabledReason('Debes marcar tu ENTRADA primero.');
+          setCheckInDisabledReason('');
+        } else if (latest.type === 'CHECK_IN') {
+          setStatusToday('PRESENTE');
+          setSuggestedType('CHECK_OUT');
+          setCanCheckIn(false);
+          setCanCheckOut(true);
+          const timeStr = new Date(latest.timestamp).toLocaleTimeString('es-BO', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          setCheckInDisabledReason(`Entrada ya registrada hoy a las ${timeStr}`);
+          setCheckOutDisabledReason('');
+        } else {
+          setStatusToday('FINALIZO_JORNADA');
+          setSuggestedType('CHECK_IN');
+          setCanCheckIn(false);
+          setCanCheckOut(false);
+          const timeStr = new Date(latest.timestamp).toLocaleTimeString('es-BO', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          setCheckInDisabledReason(`Jornada finalizada (Salida a las ${timeStr})`);
+          setCheckOutDisabledReason(`Salida ya registrada hoy a las ${timeStr}`);
+        }
         return;
       }
       setFeedback({
@@ -172,9 +235,31 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
     }
   };
 
-  // 2. Enviar Marcaje de Asistencia
+  const handleVerifyDni = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!dniInput.trim()) return;
+    await verifyWorkerDni(dniInput);
+  };
+
+  // 2. Enviar Marcaje de Asistencia con Protección Anti-Duplicados
   const handleRecordAttendance = async (type: AttendanceType) => {
     if (!verifiedWorker) return;
+
+    if (type === 'CHECK_IN' && !canCheckIn) {
+      setFeedback({
+        type: 'error',
+        message: checkInDisabledReason || 'No puedes volver a marcar entrada hoy.',
+      });
+      return;
+    }
+
+    if (type === 'CHECK_OUT' && !canCheckOut) {
+      setFeedback({
+        type: 'error',
+        message: checkOutDisabledReason || 'No puedes marcar salida en este momento.',
+      });
+      return;
+    }
 
     setIsSubmitting(true);
     setFeedback(null);
@@ -196,12 +281,33 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
       setFeedback({
         type: 'success',
         message: type === 'CHECK_IN' ? `¡Entrada registrada a las ${timeStr}!` : `¡Salida registrada a las ${timeStr}!`,
-        details: location.latitude && location.longitude
-          ? `Ubicación satelital confirmada (±${location.accuracy || 10}m).`
-          : 'Marcaje registrado con hora oficial.',
+        details:
+          location.latitude && location.longitude
+            ? `Ubicación satelital confirmada (±${location.accuracy || 10}m).`
+            : 'Marcaje registrado con hora oficial.',
       });
 
-      setSuggestedType(type === 'CHECK_IN' ? 'CHECK_OUT' : 'CHECK_IN');
+      setLatestAttendance({
+        id: result.data?.id || `att-${Date.now()}`,
+        employeeId: verifiedWorker.id,
+        type,
+        timestamp: now.toISOString(),
+      });
+
+      if (type === 'CHECK_IN') {
+        setStatusToday('PRESENTE');
+        setCanCheckIn(false);
+        setCanCheckOut(true);
+        setCheckInDisabledReason(`Entrada ya registrada a las ${timeStr}`);
+        setCheckOutDisabledReason('');
+        setSuggestedType('CHECK_OUT');
+      } else {
+        setStatusToday('FINALIZO_JORNADA');
+        setCanCheckIn(false);
+        setCanCheckOut(false);
+        setCheckInDisabledReason(`Jornada finalizada (Salida a las ${timeStr})`);
+        setCheckOutDisabledReason(`Salida ya registrada a las ${timeStr}`);
+      }
     } else {
       setFeedback({
         type: 'error',
@@ -444,11 +550,7 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
                         <button
                           key={emp.id}
                           type="button"
-                          onClick={() => {
-                            setDniInput(emp.dni);
-                            setVerifiedWorker(emp);
-                            setSuggestedType('CHECK_IN');
-                          }}
+                          onClick={() => verifyWorkerDni(emp.dni)}
                           className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-500/10 hover:border-brand-500/30 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
                         >
                           <User className="w-3 h-3 text-slate-400" />
@@ -493,17 +595,54 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
                   </button>
                 </div>
 
-                {latestAttendance && (
-                  <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs flex items-center justify-between">
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">
-                      Último marcaje hoy:
-                    </span>
-                    <span className="font-bold text-slate-900 dark:text-white font-mono">
-                      {latestAttendance.type === 'CHECK_IN' ? '🟢 Entrada' : '🔴 Salida'} a las{' '}
-                      {new Date(latestAttendance.timestamp).toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                {/* Banner Informativo del Estado de la Jornada Hoy */}
+                <div
+                  className={`p-3.5 rounded-2xl border text-xs flex items-center justify-between gap-3 ${
+                    statusToday === 'PRESENTE'
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
+                      : statusToday === 'FINALIZO_JORNADA'
+                      ? 'bg-blue-500/10 border-blue-500/30 text-blue-800 dark:text-blue-300'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full ${
+                        statusToday === 'PRESENTE'
+                          ? 'bg-emerald-500 animate-pulse'
+                          : statusToday === 'FINALIZO_JORNADA'
+                          ? 'bg-blue-500'
+                          : 'bg-amber-500'
+                      }`}
+                    />
+                    <div>
+                      <span className="font-black block">
+                        {statusToday === 'PRESENTE'
+                          ? 'En Turno (Entrada Registrada)'
+                          : statusToday === 'FINALIZO_JORNADA'
+                          ? 'Jornada Concluida Hoy'
+                          : 'Pendiente de Marcaje'}
+                      </span>
+                      <span className="text-[11px] opacity-85">
+                        {statusToday === 'PRESENTE' && latestAttendance
+                          ? `Ingreso hoy: ${new Date(latestAttendance.timestamp).toLocaleTimeString('es-BO', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}. Tu siguiente paso es marcar Salida.`
+                          : statusToday === 'FINALIZO_JORNADA' && latestAttendance
+                          ? `Salida registrada a las ${new Date(latestAttendance.timestamp).toLocaleTimeString('es-BO', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}. ¡Buen descanso!`
+                          : 'No has registrado entrada el día de hoy.'}
+                      </span>
+                    </div>
                   </div>
-                )}
+
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-white/40 dark:bg-black/20 shrink-0">
+                    {statusToday === 'PRESENTE' ? 'Activo' : statusToday === 'FINALIZO_JORNADA' ? 'Completado' : 'Ausente'}
+                  </span>
+                </div>
 
                 {feedback && (
                   <div className={`p-4 rounded-2xl border text-xs font-bold space-y-1 animate-in zoom-in-95 ${
@@ -534,36 +673,48 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
                   </div>
                 )}
 
-                {/* Botones ENTRADA y SALIDA */}
+                {/* Botones ENTRADA y SALIDA con Bloqueo Anti-Duplicado */}
                 <div className="grid grid-cols-2 gap-3 pt-2">
+                  {/* Botón MARCAR ENTRADA */}
                   <button
                     type="button"
                     onClick={() => handleRecordAttendance('CHECK_IN')}
-                    disabled={isSubmitting}
-                    className={`py-4 px-3 rounded-2xl font-black text-xs sm:text-sm flex flex-col items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer ${
-                      suggestedType === 'CHECK_IN'
-                        ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-500/25 ring-2 ring-emerald-500/40 hover:scale-[1.02] active:scale-98'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-emerald-500/20 hover:text-emerald-500 border border-slate-200 dark:border-slate-700'
+                    disabled={isSubmitting || !canCheckIn}
+                    title={!canCheckIn ? checkInDisabledReason : 'Marcar ingreso a turno'}
+                    className={`py-4 px-3 rounded-2xl font-black text-xs sm:text-sm flex flex-col items-center justify-center gap-1.5 shadow-lg transition-all ${
+                      !canCheckIn
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-slate-800 cursor-not-allowed opacity-60'
+                        : suggestedType === 'CHECK_IN'
+                        ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-500/25 ring-2 ring-emerald-500/40 hover:scale-[1.02] active:scale-98 cursor-pointer'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-emerald-500/20 hover:text-emerald-500 border border-slate-200 dark:border-slate-700 cursor-pointer'
                     }`}
                   >
                     <LogIn className="w-6 h-6" />
                     <span>MARCAR ENTRADA</span>
-                    <span className="text-[10px] font-normal opacity-80">Ingreso a turno</span>
+                    <span className="text-[10px] font-normal text-center leading-tight">
+                      {!canCheckIn ? (checkInDisabledReason || 'Entrada ya registrada') : 'Ingreso a turno'}
+                    </span>
                   </button>
 
+                  {/* Botón MARCAR SALIDA */}
                   <button
                     type="button"
                     onClick={() => handleRecordAttendance('CHECK_OUT')}
-                    disabled={isSubmitting}
-                    className={`py-4 px-3 rounded-2xl font-black text-xs sm:text-sm flex flex-col items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer ${
-                      suggestedType === 'CHECK_OUT'
-                        ? 'bg-gradient-to-tr from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white shadow-red-500/25 ring-2 ring-red-500/40 hover:scale-[1.02] active:scale-98'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-rose-500/20 hover:text-rose-500 border border-slate-200 dark:border-slate-700'
+                    disabled={isSubmitting || !canCheckOut}
+                    title={!canCheckOut ? checkOutDisabledReason : 'Marcar fin de jornada'}
+                    className={`py-4 px-3 rounded-2xl font-black text-xs sm:text-sm flex flex-col items-center justify-center gap-1.5 shadow-lg transition-all ${
+                      !canCheckOut
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-slate-800 cursor-not-allowed opacity-60'
+                        : suggestedType === 'CHECK_OUT'
+                        ? 'bg-gradient-to-tr from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white shadow-red-500/25 ring-2 ring-red-500/40 hover:scale-[1.02] active:scale-98 cursor-pointer'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-rose-500/20 hover:text-rose-500 border border-slate-200 dark:border-slate-700 cursor-pointer'
                     }`}
                   >
                     <LogOut className="w-6 h-6" />
                     <span>MARCAR SALIDA</span>
-                    <span className="text-[10px] font-normal opacity-80">Fin de jornada</span>
+                    <span className="text-[10px] font-normal text-center leading-tight">
+                      {!canCheckOut ? (checkOutDisabledReason || 'Salida bloqueada') : 'Fin de jornada'}
+                    </span>
                   </button>
                 </div>
 

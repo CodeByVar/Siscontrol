@@ -84,6 +84,7 @@ model Employee {
   // Información de pago
   paymentFrequency PaymentFrequency @default(SEMANAL)
   workSchedule     String?          @default("LUNES_A_SABADO")
+  expectedCheckInTime String?       @default("08:00") // Hora programada de entrada (ej: 08:00) para control de retrasos
   baseSalary       Decimal          @db.Decimal(10, 2)
   bankName         String?
   bankAccountNumber String?

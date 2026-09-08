@@ -573,6 +573,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             bankName: e.bankName || undefined,
             bankAccountNumber: e.bankAccountNumber || undefined,
             qrImageUrl: e.qrImageUrl || undefined,
+            expectedCheckInTime: e.expectedCheckInTime || '08:00',
             notes: e.notes || undefined,
             createdAt: e.createdAt ? String(e.createdAt).split('T')[0] : undefined,
           })));

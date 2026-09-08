@@ -10,6 +10,7 @@ import {
   QrCode,
   Edit,
   Calendar,
+  Clock,
   X,
 } from 'lucide-react';
 import { useApp, deduplicateEmployees } from '../context/AppContext';
@@ -192,10 +193,17 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
 
                 <p className="text-[11px] text-slate-400 font-mono">DNI: {emp.dni}</p>
 
-                {/* Badge de Jornada Laboral */}
-                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 font-bold bg-slate-100 dark:bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-800 w-fit">
-                  <Calendar className="w-3.5 h-3.5 text-brand-500 shrink-0" />
-                  <span>Jornada: {isLunASab ? 'Lunes a Sábado (6 días)' : 'Lunes a Viernes (5 días)'}</span>
+                {/* Badge de Jornada Laboral & Horario de Entrada */}
+                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 font-bold bg-slate-100 dark:bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-800 w-fit">
+                    <Calendar className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+                    <span>{isLunASab ? 'Lun a Sáb (6 días)' : 'Lun a Vie (5 días)'}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 font-bold bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-500/20 w-fit" title="Hora límite programada de entrada para control de retrasos">
+                    <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>Entrada: {emp.expectedCheckInTime || '08:00'}</span>
+                  </div>
                 </div>
 
                 {/* Salario Base Card con cálculo por días trabajados reales */}

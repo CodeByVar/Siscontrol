@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, UserPlus, QrCode, Upload, Calendar } from 'lucide-react';
+import { X, UserPlus, QrCode, Upload, Calendar, Clock } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PaymentFrequency, UserRole, WorkSchedule } from '../types';
 import { compressImageFile } from '../lib/imageCompressor';
@@ -23,6 +23,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
     hireDate: new Date().toISOString().split('T')[0],
     paymentFrequency: 'SEMANAL' as PaymentFrequency,
     workSchedule: 'LUNES_A_SABADO' as WorkSchedule,
+    expectedCheckInTime: '08:00',
     baseSalary: '',
     bankName: '',
     bankAccountNumber: '',
@@ -78,6 +79,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
       status: 'ACTIVE',
       paymentFrequency: formData.paymentFrequency,
       workSchedule: formData.workSchedule,
+      expectedCheckInTime: formData.expectedCheckInTime || '08:00',
       baseSalary: Number(formData.baseSalary),
       bankName: formData.bankName || undefined,
       bankAccountNumber: formData.bankAccountNumber || undefined,
@@ -215,6 +217,44 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
                   </span>
                 </div>
               </label>
+            </div>
+          </div>
+
+          {/* Horario de Ingreso Oficial y Control de Retrasos */}
+          <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="font-extrabold text-amber-950 dark:text-amber-300 flex items-center gap-1.5 text-xs">
+                <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                Hora de Ingreso Esperada (Control de Retrasos) *
+              </label>
+              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                Se marcará tardanza si ingresa después
+              </span>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <input
+                type="time"
+                required
+                value={formData.expectedCheckInTime}
+                onChange={(e) => setFormData({ ...formData, expectedCheckInTime: e.target.value })}
+                className="px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-bold text-xs focus:outline-none focus:border-amber-500 shadow-xs"
+              />
+              <div className="flex gap-1.5 flex-wrap">
+                {['07:30', '08:00', '08:30', '09:00'].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, expectedCheckInTime: preset })}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      formData.expectedCheckInTime === preset
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-amber-400'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

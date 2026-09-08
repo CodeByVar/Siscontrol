@@ -245,6 +245,7 @@ export const getAttendances = async (req: Request, res: Response) => {
             department: true,
             position: true,
             workSchedule: true,
+            expectedCheckInTime: true,
             qrImageUrl: true,
           },
         },
@@ -270,7 +271,15 @@ export const getTodaySummary = async (req: Request, res: Response) => {
 
     const activeEmployees = await prisma.employee.findMany({
       where: { status: 'ACTIVE' },
-      select: { id: true, dni: true, firstName: true, lastName: true, department: true, position: true },
+      select: {
+        id: true,
+        dni: true,
+        firstName: true,
+        lastName: true,
+        department: true,
+        position: true,
+        expectedCheckInTime: true,
+      },
     });
 
     const todayAttendances = await prisma.attendance.findMany({
@@ -282,20 +291,31 @@ export const getTodaySummary = async (req: Request, res: Response) => {
       },
       include: {
         employee: {
-          select: { id: true, dni: true, firstName: true, lastName: true, department: true, position: true },
+          select: {
+            id: true,
+            dni: true,
+            firstName: true,
+            lastName: true,
+            department: true,
+            position: true,
+            expectedCheckInTime: true,
+          },
         },
       },
       orderBy: { timestamp: 'asc' },
     });
 
     // Mapear el estado de cada trabajador hoy
-    const employeeStatusMap = new Map<string, {
-      employee: any;
-      firstCheckIn?: Date;
-      lastCheckOut?: Date;
-      currentStatus: 'PRESENTE' | 'FINALIZO_JORNADA' | 'AUSENTE';
-      latestRecord?: any;
-    }>();
+    const employeeStatusMap = new Map<
+      string,
+      {
+        employee: any;
+        firstCheckIn?: Date;
+        lastCheckOut?: Date;
+        currentStatus: 'PRESENTE' | 'FINALIZO_JORNADA' | 'AUSENTE';
+        latestRecord?: any;
+      }
+    >();
 
     activeEmployees.forEach((emp) => {
       employeeStatusMap.set(emp.id, {
@@ -318,10 +338,40 @@ export const getTodaySummary = async (req: Request, res: Response) => {
       }
     });
 
-    const statusList = Array.from(employeeStatusMap.values());
-    const presentCount = statusList.filter((s) => s.currentStatus === 'PRESENTE').length;
-    const finishedCount = statusList.filter((s) => s.currentStatus === 'FINALIZO_JORNADA').length;
-    const absentCount = statusList.filter((s) => s.currentStatus === 'AUSENTE').length;
+    let lateCount = 0;
+    let punctualCount = 0;
+
+    const enrichedStatusList = Array.from(employeeStatusMap.values()).map((item) => {
+      let isLate = false;
+      let lateMinutes = 0;
+      const expectedTime = item.employee.expectedCheckInTime || '08:00';
+
+      if (item.firstCheckIn) {
+        const checkInDate = new Date(item.firstCheckIn);
+        const [expH, expM] = String(expectedTime).split(':').map(Number);
+        const actualMinutes = checkInDate.getHours() * 60 + checkInDate.getMinutes();
+        const scheduledMinutes = (isNaN(expH) ? 8 : expH) * 60 + (isNaN(expM) ? 0 : expM);
+
+        if (actualMinutes > scheduledMinutes) {
+          isLate = true;
+          lateMinutes = actualMinutes - scheduledMinutes;
+          lateCount++;
+        } else {
+          punctualCount++;
+        }
+      }
+
+      return {
+        ...item,
+        expectedTime,
+        isLate,
+        lateMinutes,
+      };
+    });
+
+    const presentCount = enrichedStatusList.filter((s) => s.currentStatus === 'PRESENTE').length;
+    const finishedCount = enrichedStatusList.filter((s) => s.currentStatus === 'FINALIZO_JORNADA').length;
+    const absentCount = enrichedStatusList.filter((s) => s.currentStatus === 'AUSENTE').length;
 
     return res.json({
       totalEmployees: activeEmployees.length,
@@ -329,7 +379,9 @@ export const getTodaySummary = async (req: Request, res: Response) => {
       finishedDay: finishedCount,
       absentToday: absentCount,
       totalCheckedInToday: presentCount + finishedCount,
-      records: statusList,
+      punctualToday: punctualCount,
+      lateToday: lateCount,
+      records: enrichedStatusList,
     });
   } catch (error) {
     console.error('Error al obtener resumen de hoy:', error);

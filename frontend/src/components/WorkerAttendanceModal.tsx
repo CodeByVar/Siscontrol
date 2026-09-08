@@ -277,10 +277,26 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
 
     if (result.success) {
       const now = new Date();
-      const timeStr = now.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' });
+      let punctualityNote = '';
+      if (type === 'CHECK_IN') {
+        const expectedTime = verifiedWorker.expectedCheckInTime || '08:00';
+        const [expH, expM] = String(expectedTime).split(':').map(Number);
+        const actualMins = now.getHours() * 60 + now.getMinutes();
+        const schedMins = (isNaN(expH) ? 8 : expH) * 60 + (isNaN(expM) ? 0 : expM);
+        const diff = actualMins - schedMins;
+        if (diff > 0) {
+          punctualityNote = ` (Retraso de +${diff} min respecto a tu turno de ${expectedTime})`;
+        } else {
+          punctualityNote = ` (Puntual para tu horario de ${expectedTime})`;
+        }
+      }
+
       setFeedback({
         type: 'success',
-        message: type === 'CHECK_IN' ? `¡Entrada registrada a las ${timeStr}!` : `¡Salida registrada a las ${timeStr}!`,
+        message:
+          type === 'CHECK_IN'
+            ? `¡Entrada registrada a las ${timeStr}!${punctualityNote}`
+            : `¡Salida registrada a las ${timeStr}!`,
         details:
           location.latitude && location.longitude
             ? `Ubicación satelital confirmada (±${location.accuracy || 10}m).`

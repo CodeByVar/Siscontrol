@@ -7,6 +7,7 @@ import {
   Users,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
   Smartphone,
   Search,
@@ -107,13 +108,47 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
     loadData();
   }, [selectedDate]);
 
+  // Cálculo de tardanza / retraso para entradas
+  const getDelayInfo = (att: AttendanceRecord) => {
+    if (att.type !== 'CHECK_IN') return null;
+
+    const emp = att.employee || employees.find((e) => e.id === att.employeeId);
+    const expectedTime = emp?.expectedCheckInTime || '08:00';
+
+    const checkInDate = new Date(att.timestamp);
+    const [expH, expM] = String(expectedTime).split(':').map(Number);
+    const actualMinutes = checkInDate.getHours() * 60 + checkInDate.getMinutes();
+    const scheduledMinutes = (isNaN(expH) ? 8 : expH) * 60 + (isNaN(expM) ? 0 : expM);
+    const diffMinutes = actualMinutes - scheduledMinutes;
+
+    return {
+      expectedTime,
+      isLate: diffMinutes > 0,
+      diffMinutes,
+    };
+  };
+
+  const lateCheckInsCount = attendances.filter((att) => {
+    const d = getDelayInfo(att);
+    return d && d.isLate;
+  }).length;
+
   // Filtrado de registros
   const filteredRecords = attendances.filter((att) => {
-    const empName = att.employee
-      ? `${att.employee.firstName} ${att.employee.lastName} ${att.employee.dni}`.toLowerCase()
+    const emp = att.employee || employees.find((e) => e.id === att.employeeId);
+    const empName = emp
+      ? `${emp.firstName} ${emp.lastName} ${emp.dni}`.toLowerCase()
       : '';
     const matchesSearch = empName.includes(searchQuery.toLowerCase());
-    const matchesType = filterType === 'ALL' || att.type === filterType;
+
+    let matchesType = true;
+    if (filterType === 'CHECK_IN') matchesType = att.type === 'CHECK_IN';
+    else if (filterType === 'CHECK_OUT') matchesType = att.type === 'CHECK_OUT';
+    else if (filterType === 'LATE') {
+      const delay = getDelayInfo(att);
+      matchesType = !!(delay && delay.isLate);
+    }
+
     return matchesSearch && matchesType;
   });
 
@@ -205,6 +240,24 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
           </span>
         </div>
 
+        {/* Con Retraso / Tardanza */}
+        <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-amber-500 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+              Con Retraso Hoy
+            </span>
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400 font-mono">
+            {lateCheckInsCount}
+          </div>
+          <span className="text-[11px] text-slate-400 block mt-1">
+            {lateCheckInsCount === 0 ? '¡Todos ingresaron puntuales!' : 'Ingresaron después de su horario'}
+          </span>
+        </div>
+
         {/* Salidas Registradas */}
         <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-sky-500 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-2">
@@ -240,24 +293,6 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
             Trabajadores pendientes de marcar
           </span>
         </div>
-
-        {/* Total Marcajes Registrados */}
-        <div className="glass-panel p-5 rounded-3xl border-t-4 border-t-indigo-500 border-x border-b border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-              Total Marcajes Hoy
-            </span>
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500">
-              <MapPin className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
-            {attendances.length}
-          </div>
-          <span className="text-[11px] text-slate-400 block mt-1">
-            Entradas y salidas con GPS
-          </span>
-        </div>
       </div>
 
       {/* 3. Filtros y Búsqueda */}
@@ -273,12 +308,12 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
           <Filter className="w-4 h-4 text-slate-400 shrink-0" />
-          <div className="flex gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
+          <div className="flex gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold flex-wrap">
             <button
               onClick={() => setFilterType('ALL')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 filterType === 'ALL'
                   ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -288,7 +323,7 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
             </button>
             <button
               onClick={() => setFilterType('CHECK_IN')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 filterType === 'CHECK_IN'
                   ? 'bg-emerald-500 text-white shadow-xs'
                   : 'text-slate-500 hover:text-emerald-500'
@@ -297,8 +332,19 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
               Entradas
             </button>
             <button
+              onClick={() => setFilterType('LATE')}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                filterType === 'LATE'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Con Retraso ({lateCheckInsCount})</span>
+            </button>
+            <button
               onClick={() => setFilterType('CHECK_OUT')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 filterType === 'CHECK_OUT'
                   ? 'bg-rose-500 text-white shadow-xs'
                   : 'text-slate-500 hover:text-rose-500'
@@ -318,10 +364,12 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
               <Clock className="w-8 h-8" />
             </div>
             <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-              No hay marcajes registrados para el {selectedDate}
+              No hay marcajes que coincidan con los filtros seleccionados
             </h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Los trabajadores pueden marcar su asistencia usando su carnet de identidad y GPS desde su celular.
+              {filterType === 'LATE'
+                ? '¡Buenas noticias! Ningún trabajador tiene registro de tardanza para este filtro.'
+                : 'Los trabajadores pueden marcar su asistencia usando su carnet de identidad y GPS desde su celular.'}
             </p>
             <button
               onClick={onOpenWorkerModal}
@@ -338,14 +386,16 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
                 <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/40 text-[10px] font-black text-slate-400 uppercase tracking-wider">
                   <th className="py-3 px-4">Trabajador</th>
                   <th className="py-3 px-4">Tipo</th>
-                  <th className="py-3 px-4">Hora Oficial</th>
+                  <th className="py-3 px-4">Hora Marcaje</th>
+                  <th className="py-3 px-4">Puntualidad / Retraso</th>
                   <th className="py-3 px-4">Ubicación GPS Satelital</th>
                   <th className="py-3 px-4 text-right">Mapa Google</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-xs">
                 {filteredRecords.map((att) => {
-                  const emp = att.employee;
+                  const emp = att.employee || employees.find((e) => e.id === att.employeeId);
+                  const delayInfo = getDelayInfo(att);
                   const timeStr = new Date(att.timestamp).toLocaleTimeString('es-BO', {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -389,6 +439,34 @@ export const AttendanceAdminView: React.FC<AttendanceAdminViewProps> = ({
                       {/* Hora */}
                       <td className="py-3.5 px-4 font-mono font-bold text-slate-800 dark:text-slate-200">
                         {timeStr}
+                      </td>
+
+                      {/* Puntualidad / Control de Retrasos */}
+                      <td className="py-3.5 px-4">
+                        {att.type === 'CHECK_IN' && delayInfo ? (
+                          <div className="space-y-0.5">
+                            {delayInfo.isLate ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-[11px] border border-amber-500/30">
+                                <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                <span>Retraso +{delayInfo.diffMinutes} min</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] border border-emerald-500/30">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                                <span>
+                                  Puntual {delayInfo.diffMinutes < 0 ? `(${Math.abs(delayInfo.diffMinutes)}m antes)` : ''}
+                                </span>
+                              </span>
+                            )}
+                            <span className="text-[10px] text-slate-400 block font-mono">
+                              Turno: {delayInfo.expectedTime}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-[11px] italic">
+                            {att.type === 'CHECK_OUT' ? 'Fin de turno' : '—'}
+                          </span>
+                        )}
                       </td>
 
                       {/* Coordenadas GPS */}

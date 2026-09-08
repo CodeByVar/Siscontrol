@@ -30,6 +30,7 @@ export interface Employee {
   status: EmployeeStatus;
   paymentFrequency: PaymentFrequency;
   workSchedule?: WorkSchedule; // Lunes a Sábado vs Lunes a Viernes
+  expectedCheckInTime?: string; // Hora programada de entrada (ej: "08:00") para control de retrasos
   baseSalary: number;
   bankName?: string;
   bankAccountNumber?: string;

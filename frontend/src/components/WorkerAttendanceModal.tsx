@@ -277,6 +277,10 @@ export const WorkerAttendanceModal: React.FC<WorkerAttendanceModalProps> = ({
 
     if (result.success) {
       const now = new Date();
+      const timeStr = now.toLocaleTimeString('es-BO', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
       let punctualityNote = '';
       if (type === 'CHECK_IN') {
         const expectedTime = verifiedWorker.expectedCheckInTime || '08:00';
